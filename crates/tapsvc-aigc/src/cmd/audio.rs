@@ -1,7 +1,7 @@
 use anyhow::{Context, bail};
 use chrono::Local;
 use tapsvc_aigc_openai::OpenAiClient;
-use tapsvc_aigc_openai::audio::SpeechRequest;
+use tapsvc_aigc_openai::audio::{SpeechRequest, VoiceSettings};
 
 use crate::cli::AudioCommand;
 
@@ -14,6 +14,8 @@ pub async fn handle(command: AudioCommand) -> anyhow::Result<()> {
             input_file,
             format,
             speed,
+            stability,
+            similarity,
             output,
         } => {
             let text = resolve_input(input.as_deref(), input_file.as_deref()).await?;
@@ -24,12 +26,22 @@ pub async fn handle(command: AudioCommand) -> anyhow::Result<()> {
 
             let client = OpenAiClient::new(base_url, api_key);
 
+            let voice_settings = if stability.is_some() || similarity.is_some() {
+                Some(VoiceSettings {
+                    stability,
+                    similarity_boost: similarity,
+                })
+            } else {
+                None
+            };
+
             let req = SpeechRequest {
                 model,
                 input: text,
                 voice,
                 response_format: Some(format.clone()),
                 speed: Some(speed),
+                voice_settings,
             };
 
             let audio_bytes = client.speech(&req).await?;

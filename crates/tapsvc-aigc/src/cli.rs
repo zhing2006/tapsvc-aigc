@@ -137,6 +137,14 @@ pub enum AudioCommand {
         #[arg(long, default_value_t = 1.0)]
         speed: f32,
 
+        /// Voice stability (0.0-1.0, lower = more expressive, higher = more stable)
+        #[arg(long)]
+        stability: Option<f32>,
+
+        /// Voice similarity boost (0.0-1.0, higher = closer to original voice)
+        #[arg(long)]
+        similarity: Option<f32>,
+
         /// Output file path
         #[arg(short, long)]
         output: Option<String>,

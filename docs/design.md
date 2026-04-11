@@ -150,6 +150,9 @@ tapsvc-aigc audio speech \
 
 # 指定语速
 tapsvc-aigc audio speech --model elevenlabs/eleven_multilingual_v2 --voice echo --speed 1.2 --input "快速阅读" -o fast.mp3
+
+# 调整 stability（低值更富表现力，高值更稳定）
+tapsvc-aigc audio speech --model elevenlabs/eleven_v3 --voice alloy --stability 0.3 --similarity 0.8 --input "dramatic reading" -o expressive.mp3
 ```
 
 **子命令参数：**
@@ -162,6 +165,8 @@ tapsvc-aigc audio speech --model elevenlabs/eleven_multilingual_v2 --voice echo 
 | `--input-file` | 否 | — | 从文件读取文本，与 `--input` 二选一 |
 | `--format` | 否 | `mp3` | 输出格式 (`mp3`, `opus`, `aac`, `flac`, `wav`, `pcm`) |
 | `--speed` | 否 | `1.0` | 语速 |
+| `--stability` | 否 | — | 语音稳定性（0.0-1.0，低值更富表现力，高值更稳定） |
+| `--similarity` | 否 | — | 声音相似度（0.0-1.0，高值更接近原始音色） |
 | `--output, -o` | 否 | 当前目录自动命名 | 输出文件路径 |
 
 ### 3.5 视频生成
@@ -352,7 +357,11 @@ Authorization: Bearer {api_key}
   "input": "Hello, world!",
   "voice": "alloy",
   "response_format": "mp3",
-  "speed": 1.0
+  "speed": 1.0,
+  "voice_settings": {
+    "stability": 0.5,
+    "similarity_boost": 0.75
+  }
 }
 ```
 
