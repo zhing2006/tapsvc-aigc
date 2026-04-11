@@ -49,12 +49,10 @@ tapsvc-aigc 是一个 Rust CLI 工具，通过 OpenAI 兼容代理调用多种 A
 
 ### 2.3 视频生成 (Volcengine ARK)
 
-| 模型 | Model ID | 说明 |
-|------|----------|------|
-| Seedance 2.0 | `doubao-seedance-2-0-260128` | 标准版，质量最优 |
-| Seedance 2.0 Lite | `doubao-seedance-2-0-fast-260128` | 快速版，速度优先 |
+视频生成走 Volcengine ARK 原生 API（非 OpenAI 兼容端点），通过 `-m` 参数直接传入 API model ID：
 
-> 视频生成走 Volcengine ARK 原生 API，非 OpenAI 兼容端点。
+- `doubao-seedance-2-0-260128` — 标准版，质量最优
+- `doubao-seedance-2-0-fast-260128` — 快速版，速度优先
 
 ## 3. CLI 命令设计
 
@@ -130,7 +128,7 @@ tapsvc-aigc image edit --model gpt-image-1.5 --image input.png --prompt-file edi
 | `--image` | 是 | — | 输入图片路径（PNG/JPEG/WebP，< 25MB） |
 | `--prompt, -p` | 是* | — | 编辑提示词 |
 | `--prompt-file` | 否 | — | 从文件读取提示词，可与 `--prompt` 同时使用（file 内容在前拼接） |
-| `--mask` | 否 | — | 编辑区域蒙版（PNG，< 4MB，与输入图片同尺寸，透明区域为编辑区域；仅 gpt-image-1.5 支持，Gemini 不支持） |
+| `--mask` | 否 | — | 编辑区域蒙版（PNG，< 4MB，透明区域为编辑区域；仅 gpt-image-1.5 支持，Gemini 不支持。CLI 仅校验格式和大小，不在本地校验是否与输入图片同尺寸） |
 | `--size` | 否 | `1024x1024` | 输出图片尺寸 |
 | `--n` | 否 | `1` | 生成数量 (1-10) |
 | `--response-format` | 否 | `png` | 输出图片格式 (`png`, `jpeg`, `webp`) |
@@ -168,50 +166,95 @@ tapsvc-aigc audio speech --model elevenlabs/eleven_multilingual_v2 --voice echo 
 
 ### 3.5 视频生成
 
+#### 3.5.1 video generate
+
 ```bash
 # 文生视频
 tapsvc-aigc video generate \
-  --model seedance-2.0 \
+  -m doubao-seedance-2-0-260128 \
   --prompt "a dog running on the beach, cinematic" \
   --duration 5 \
-  --resolution 1080p \
+  --resolution 720p \
   -o dog.mp4
 
-# 图生视频
+# 首帧图生视频
 tapsvc-aigc video generate \
-  --model seedance-2.0-lite \
+  -m doubao-seedance-2-0-fast-260128 \
   --prompt "make the character walk forward" \
-  --image reference.jpg \
+  --first-frame start.jpg \
   --duration 5 \
   -o walk.mp4
 
 # 首尾帧控制
 tapsvc-aigc video generate \
-  --model seedance-2.0 \
+  -m doubao-seedance-2-0-260128 \
   --prompt "smooth transition" \
   --first-frame start.jpg \
   --last-frame end.jpg \
   -o transition.mp4
+
+# 多参考图模式
+tapsvc-aigc video generate \
+  -m doubao-seedance-2-0-260128 \
+  --prompt "combine these into a video" \
+  --ref-image a.jpg --ref-image b.jpg \
+  -o combined.mp4
+
+# 从文件读取 prompt
+tapsvc-aigc video generate \
+  -m doubao-seedance-2-0-260128 \
+  --prompt-file prompt.txt \
+  -o result.mp4
 ```
 
-**子命令参数：**
+**generate 参数：**
 
 | 参数 | 必须 | 默认值 | 说明 |
 |------|------|--------|------|
-| `--model, -m` | 是 | — | 模型名称 (`seedance-2.0`, `seedance-2.0-lite`) |
-| `--prompt, -p` | 是 | — | 生成提示词 |
-| `--prompt-file` | 否 | — | 从文件读取提示词 |
-| `--image` | 否 | — | 参考图片（图生视频） |
-| `--first-frame` | 否 | — | 首帧图片 |
-| `--last-frame` | 否 | — | 尾帧图片 |
-| `--duration` | 否 | `5` | 视频时长，4-15 秒 |
-| `--resolution` | 否 | `1080p` | 分辨率 (`480p`, `720p`, `1080p`, `2K`) |
-| `--aspect-ratio` | 否 | `16:9` | 宽高比 (`1:1`, `16:9`, `9:16`, `4:3`, `3:4`, `21:9`, `adaptive`) |
+| `--model, -m` | 是 | — | API model ID（直接透传） |
+| `--prompt, -p` | 否* | — | 生成提示词 |
+| `--prompt-file` | 否 | — | 从文件读取提示词，可与 `--prompt` 同时使用（file 在前拼接） |
+| `--first-frame` | 否 | — | 首帧图片（图生视频，与 `--ref-image`/`--ref-video` 互斥） |
+| `--last-frame` | 否 | — | 尾帧图片（需搭配 `--first-frame`） |
+| `--ref-image` | 否 | — | 参考图片（可重复，最多 9 张，与 `--first-frame` 互斥） |
+| `--ref-video` | 否 | — | 参考视频 URL（可重复，最多 3 个，仅支持 URL，与 `--first-frame` 互斥） |
+| `--ref-audio` | 否 | — | 参考音频（可重复，最多 3 个，需搭配 `--ref-image` 或 `--ref-video`） |
+| `--resolution` | 否 | `720p` | 分辨率（`480p`、`720p`） |
+| `--aspect-ratio` | 否 | `adaptive` | 宽高比（`16:9`、`4:3`、`1:1`、`3:4`、`9:16`、`21:9`、`adaptive`） |
+| `--duration` | 否 | `5` | 视频时长，4-15 秒或 -1 自动 |
+| `--no-audio` | 否 | `false` | 禁用音频生成（默认生成音频） |
 | `--watermark` | 否 | `false` | 添加水印 |
-| `--generate-audio` | 否 | `false` | 同步生成音频 |
-| `--poll-interval` | 否 | `5` | 轮询间隔（秒） |
+| `--web-search` | 否 | `false` | 启用网络搜索增强 |
+| `--camera-fixed` | 否 | `false` | 固定镜头 |
+| `--seed` | 否 | — | 随机种子 |
+| `--poll-interval` | 否 | `10` | 轮询间隔（秒） |
 | `--timeout` | 否 | `300` | 超时时间（秒） |
-| `--output, -o` | 否 | 当前目录自动命名 | 输出文件路径 |
+| `--output, -o` | 否 | `video_{timestamp}.mp4` | 输出文件路径 |
+
+> *`--prompt`/`--prompt-file` 至少需要与 `--first-frame`、`--ref-image`、`--ref-video` 中的一种共同提供，或单独提供 prompt 进行文生视频。
+
+#### 3.5.2 video get / list / delete
+
+```bash
+# 查询单个任务状态
+tapsvc-aigc video get <task-id>
+
+# 列出任务（支持过滤和分页）
+tapsvc-aigc video list --status succeeded --page 1 --page-size 20
+
+# 删除任务
+tapsvc-aigc video delete <task-id>
+```
+
+**list 参数：**
+
+| 参数 | 必须 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--status, -s` | 否 | — | 按状态过滤（`queued`/`running`/`succeeded`/`failed`/`cancelled`） |
+| `--model, -m` | 否 | — | 按模型过滤 |
+| `--task-ids` | 否 | — | 按 task ID 过滤 |
+| `--page, -p` | 否 | `1` | 页码 |
+| `--page-size, -n` | 否 | `10` | 每页数量 |
 
 ## 4. API 对接细节
 
@@ -254,7 +297,7 @@ Authorization: Bearer {api_key}
 **CLI 逻辑：**
 1. 构建请求体，POST 到 `{base_url}/v1/images/generations`
 2. 解析响应，base64 解码 `b64_json` 后写入文件
-3. 多张图片时输出为 `output_1.png`, `output_2.png`, ...
+3. 多张图片时，若指定 `--output result.png`，输出为 `result_1.png`, `result_2.png`, ...；未指定时自动命名为 `image_YYYYMMDD_HHMMSS_1.png`, `image_YYYYMMDD_HHMMSS_2.png`, ...
 
 ### 4.2 图片编辑 — OpenAI 兼容
 
@@ -293,7 +336,7 @@ output_format=png
 1. 读取 `--image` 和 `--mask`（如有）文件内容
 2. 构建 multipart/form-data 请求体，POST 到 `{base_url}/v1/images/edits`
 3. 解析响应，base64 解码 `b64_json` 后写入文件
-4. 多张图片时输出为 `output_1.png`, `output_2.png`, ...
+4. 多张图片时，若指定 `--output result.png`，输出为 `result_1.png`, `result_2.png`, ...；未指定时自动命名为 `edited_YYYYMMDD_HHMMSS_1.png`, `edited_YYYYMMDD_HHMMSS_2.png`, ...
 
 ### 4.3 语音合成 — OpenAI 兼容
 
@@ -319,20 +362,15 @@ Authorization: Bearer {api_key}
 
 **CLI 逻辑：**
 1. 构建请求体，POST 到 `{base_url}/v1/audio/speech`
-2. 以流式方式接收响应 body
-3. 直接写入输出文件
+2. 一次性读取响应 body 到内存
+3. 将音频数据写入输出文件
 
 ### 4.4 视频生成 — Volcengine ARK API
 
-Seedance 2.0 API 使用异步任务模式，通过统一代理访问。
+Seedance 2.0 API 使用异步任务模式，通过统一代理访问。model ID 由 `-m` 参数直接传入，不做映射。
 
-**模型名称映射：**
-```
-seedance-2.0      → doubao-seedance-2-0-260128
-seedance-2.0-lite → doubao-seedance-2-0-fast-260128
-```
+#### 4.4.1 提交任务 (create)
 
-**步骤 1 — 提交任务：**
 ```json
 POST {base_url}/volcengine/api/v3/contents/generations/tasks
 Authorization: Bearer {api_key}
@@ -340,34 +378,82 @@ Authorization: Bearer {api_key}
 {
   "model": "doubao-seedance-2-0-260128",
   "content": [
-    {
-      "type": "text",
-      "text": "a dog running on the beach"
-    }
+    { "type": "text", "text": "a dog running on the beach" },
+    { "type": "image_url", "image_url": { "url": "data:image/png;base64,..." }, "role": "first_frame" }
   ],
   "duration": 5,
-  "resolution": "1080p",
-  "ratio": "16:9",
+  "resolution": "720p",
+  "ratio": "adaptive",
   "watermark": false,
-  "generate_audio": false
+  "generate_audio": true
 }
 ```
 
-**步骤 2 — 轮询状态：**
+`content` 数组支持以下类型：
+
+| type | role 值 | 说明 |
+|------|---------|------|
+| `text` | — | 文本 prompt |
+| `image_url` | `first_frame` / `last_frame` / `reference_image` | 图片（本地文件 base64 编码或 URL） |
+| `video_url` | `reference_video` | 参考视频（仅 URL） |
+| `audio_url` | `reference_audio` | 参考音频（本地文件 base64 编码或 URL） |
+
+**响应：**
+```json
+{ "id": "task_xxx" }
+```
+
+#### 4.4.2 查询任务 (get)
+
 ```
 GET {base_url}/volcengine/api/v3/contents/generations/tasks/{task_id}
 Authorization: Bearer {api_key}
 ```
 
-**步骤 3 — 下载视频：**
-任务状态变为 `succeeded` 后，从响应中提取 `video_url`，下载保存。
+**响应：**
+```json
+{
+  "id": "task_xxx",
+  "model": "doubao-seedance-2-0-260128",
+  "status": "succeeded",
+  "content": { "video_url": "https://...", "last_frame_url": "https://..." },
+  "duration": 5,
+  "ratio": "adaptive",
+  "resolution": "720p",
+  "created_at": 1234567890,
+  "updated_at": 1234567890
+}
+```
 
-**CLI 逻辑：**
-1. 提交生成任务，获取 `task_id`
-2. 按 `--poll-interval` 轮询任务状态，显示进度
-3. 状态变为 `succeeded` 后下载视频到输出路径
-4. 超过 `--timeout` 则报错退出
-5. 注意：`video_url` 24 小时内有效
+任务状态：`queued` → `running` → `succeeded` / `failed` / `cancelled`
+
+#### 4.4.3 列出任务 (list)
+
+```
+GET {base_url}/volcengine/api/v3/contents/generations/tasks?page_num=1&page_size=10&filter.status=succeeded
+Authorization: Bearer {api_key}
+```
+
+**响应：**
+```json
+{ "total": 42, "items": [ ... ] }
+```
+
+#### 4.4.4 删除任务 (delete)
+
+```
+DELETE {base_url}/volcengine/api/v3/contents/generations/tasks/{task_id}
+Authorization: Bearer {api_key}
+```
+
+#### CLI 逻辑（generate）
+
+1. 读取本地图片/音频文件 → base64 编码为 data URI
+2. 组装 `content[]` + 生成参数 → 提交任务，获取 `task_id`
+3. 按 `--poll-interval` 轮询任务状态，stderr 展示进度
+4. 状态变为 `succeeded` 后下载 `video_url` 到输出路径
+5. 超过 `--timeout` 则输出 task_id 供稍后查询
+6. 注意：`video_url` 24 小时内有效
 
 ## 5. Workspace 与 Crate 结构
 

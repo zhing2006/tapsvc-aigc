@@ -9,6 +9,7 @@ tapsvc-aigc-core.workspace = true
 tapsvc-aigc-openai.workspace = true
 tapsvc-aigc-ark.workspace = true
 tokio.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
