@@ -18,6 +18,11 @@ tapsvc-aigc 是一个 Rust CLI 工具，通过 OpenAI 兼容代理调用多种 A
 | `gemini-3-pro-image-preview` | Google | Gemini 3 Pro 图片生成 |
 | `gemini-3.1-flash-image-preview` | Google | Gemini 3.1 Flash 图片生成 |
 
+> **LiteLLM 代理下 Gemini 模型的已知限制：**
+> - **`n` 只支持 1** — Gemini 图片生成仅支持单张输出，`n > 1` 会返回 400 错误
+> - **宽高比固定 1:1** — LiteLLM 不透传 Gemini 的 `aspectRatio` 和 `imageSize` 参数（[litellm#18656](https://github.com/BerriAI/litellm/issues/18656)），非方形尺寸（如 `1536x1024`）会被忽略，始终输出 1:1 方图
+> - **`size` 仅支持 `1024x1024`** — Gemini 原生 API 使用 `"1K"`/`"2K"`/`"4K"` 格式指定分辨率，但 LiteLLM 不正确转换 `WxH` 格式
+
 ### 2.2 语音合成 (`/v1/audio/speech`)
 
 | 模型 | 提供商 | 说明 |
@@ -82,7 +87,39 @@ tapsvc-aigc image generate --model gemini-3.1-flash-image-preview --prompt-file 
 | `--background` | 否 | `auto` | 背景类型 (`transparent`, `opaque`, `auto`) |
 | `--output, -o` | 否 | 当前目录自动命名 | 输出文件路径 |
 
-### 3.3 语音合成
+### 3.3 图片编辑
+
+```bash
+# 基本用法 — 根据 prompt 编辑图片
+tapsvc-aigc image edit --model gpt-image-1.5 --image input.png --prompt "add a hat to the person" -o edited.png
+
+# 带 mask 的局部编辑
+tapsvc-aigc image edit \
+  --model gpt-image-1.5 \
+  --image input.png \
+  --mask mask.png \
+  --prompt "replace the background with a beach" \
+  -o beach.png
+
+# 从文件读取 prompt
+tapsvc-aigc image edit --model gpt-image-1.5 --image input.png --prompt-file edit_instructions.txt -o result.png
+```
+
+**子命令参数：**
+
+| 参数 | 必须 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--model, -m` | 是 | — | 模型名称 |
+| `--image` | 是 | — | 输入图片路径（PNG，< 4MB） |
+| `--prompt, -p` | 是* | — | 编辑提示词 |
+| `--prompt-file` | 否 | — | 从文件读取提示词，可与 `--prompt` 同时使用（file 内容在前拼接） |
+| `--mask` | 否 | — | 编辑区域蒙版（PNG，与输入图片同尺寸，透明区域为编辑区域） |
+| `--size` | 否 | `1024x1024` | 输出图片尺寸 |
+| `--n` | 否 | `1` | 生成数量 (1-10) |
+| `--response-format` | 否 | `png` | 输出图片格式 (`png`, `jpeg`, `webp`) |
+| `--output, -o` | 否 | 当前目录自动命名 | 输出文件路径 |
+
+### 3.4 语音合成
 
 ```bash
 # 基本用法
@@ -113,7 +150,7 @@ tapsvc-aigc audio speech --model elevenlabs/eleven_multilingual_v2 --voice echo 
 | `--instructions` | 否 | — | 语气风格控制 (如 `"Speak in a cheerful tone"`) |
 | `--output, -o` | 否 | 当前目录自动命名 | 输出文件路径 |
 
-### 3.4 视频生成
+### 3.5 视频生成
 
 ```bash
 # 文生视频
@@ -177,12 +214,12 @@ Authorization: Bearer {api_key}
   "n": 1,
   "size": "1024x1024",
   "quality": "auto",
-  "response_format": "png",
+  "response_format": "b64_json",
   "background": "auto"
 }
 ```
 
-> GPT image 模型始终返回 base64 编码的图片数据。`response_format` 指定输出图片格式（`png`/`jpeg`/`webp`），而非传输格式。
+> `response_format` 固定为 `"b64_json"`，确保返回 base64 编码的图片数据。CLI 的 `--response-format` 参数（`png`/`jpeg`/`webp`）仅控制输出文件扩展名。
 
 **响应：**
 ```json
@@ -202,7 +239,46 @@ Authorization: Bearer {api_key}
 2. 解析响应，base64 解码 `b64_json` 后写入文件
 3. 多张图片时输出为 `output_1.png`, `output_2.png`, ...
 
-### 4.2 语音合成 — OpenAI 兼容
+### 4.2 图片编辑 — OpenAI 兼容
+
+通过代理调用，请求格式为 multipart/form-data（非 JSON）。
+
+**请求：**
+```
+POST {base_url}/v1/images/edits
+Authorization: Bearer {api_key}
+Content-Type: multipart/form-data
+
+model=gpt-image-1.5
+image=@input.png
+mask=@mask.png          (可选)
+prompt=add a hat to the person
+n=1
+size=1024x1024
+response_format=b64_json
+```
+
+> `image` 和 `mask` 为文件上传字段。`mask` 中透明区域表示需要编辑的区域。
+
+**响应：**
+```json
+{
+  "created": 1234567890,
+  "data": [
+    {
+      "b64_json": "iVBORw0KGgo..."
+    }
+  ]
+}
+```
+
+**CLI 逻辑：**
+1. 读取 `--image` 和 `--mask`（如有）文件内容
+2. 构建 multipart/form-data 请求体，POST 到 `{base_url}/v1/images/edits`
+3. 解析响应，base64 解码 `b64_json` 后写入文件
+4. 多张图片时输出为 `output_1.png`, `output_2.png`, ...
+
+### 4.3 语音合成 — OpenAI 兼容
 
 通过代理调用，代理负责转换为 ElevenLabs 原生格式。
 
@@ -230,7 +306,7 @@ Authorization: Bearer {api_key}
 2. 以流式方式接收响应 body
 3. 直接写入输出文件
 
-### 4.3 视频生成 — Volcengine ARK API
+### 4.4 视频生成 — Volcengine ARK API
 
 Seedance 2.0 API 使用异步任务模式，通过统一代理访问。
 

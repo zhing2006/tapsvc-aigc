@@ -36,7 +36,7 @@ pub async fn handle(command: ImageCommand) -> anyhow::Result<()> {
                 n: Some(n),
                 size: Some(size),
                 quality: Some(quality),
-                response_format: Some(response_format.clone()),
+                response_format: Some("b64_json".to_string()),
                 background: Some(background),
             };
 
