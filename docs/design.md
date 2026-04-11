@@ -20,15 +20,32 @@ tapsvc-aigc 是一个 Rust CLI 工具，通过 OpenAI 兼容代理调用多种 A
 
 > **LiteLLM 代理下 Gemini 模型的已知限制：**
 > - **`n` 只支持 1** — Gemini 图片生成仅支持单张输出，`n > 1` 会返回 400 错误
-> - **宽高比固定 1:1** — LiteLLM 不透传 Gemini 的 `aspectRatio` 和 `imageSize` 参数（[litellm#18656](https://github.com/BerriAI/litellm/issues/18656)），非方形尺寸（如 `1536x1024`）会被忽略，始终输出 1:1 方图
-> - **`size` 仅支持 `1024x1024`** — Gemini 原生 API 使用 `"1K"`/`"2K"`/`"4K"` 格式指定分辨率，但 LiteLLM 不正确转换 `WxH` 格式
+> - **`size` 映射为 `aspectRatio`** — LiteLLM 将 `WxH` 格式自动转换为 Gemini 的 `aspectRatio`（如 `1792x1024` → `16:9`、`1536x1024` → `3:2`），此功能已在 [litellm#18948](https://github.com/BerriAI/litellm/pull/18948) 中修复（仅 Google AI Studio 路径，VertexAI 路径仍有问题）
+> - **`mask` 不支持** — Gemini 无原生 mask 概念，image edit 时传入 `--mask` 会被 LiteLLM 拒绝（[litellm#17719](https://github.com/BerriAI/litellm/issues/17719)），CLI 不做模型级拦截，Gemini 编辑仅通过 prompt 描述
 
 ### 2.2 语音合成 (`/v1/audio/speech`)
 
 | 模型 | 提供商 | 说明 |
 |------|--------|------|
 | `elevenlabs/eleven_multilingual_v2` | ElevenLabs | 多语言 TTS，支持长文本（最多 10000 字符） |
-| `elevenlabs/eleven_v3` | ElevenLabs | 最新一代 TTS，最大表现力 |
+| `elevenlabs/eleven_v3` | ElevenLabs | 最新一代 TTS，最大表现力（最多 3000 字符） |
+
+> **Voice 名称：** LiteLLM 内置了 OpenAI 声音名称到 ElevenLabs Voice ID 的映射。用户也可以直接传入 ElevenLabs Voice ID，LiteLLM 会原样透传。
+>
+> | OpenAI Voice | ElevenLabs Voice ID | 描述 |
+> |---|---|---|
+> | `alloy` | `21m00Tcm4TlvDq8ikWAM` | Rachel — 中性 |
+> | `amber` | `5Q0t7uMcjvnagumLfvZi` | Paul — 温暖 |
+> | `ash` | `AZnzlk1XvdvUeBnXmlld` | Domi — 有活力 |
+> | `august` | `D38z5RcWu1voky8WS1ja` | Fin — 专业 |
+> | `blue` | `2EiwWnXFnvU5JabPnv8n` | Clyde — 低沉 |
+> | `coral` | `9BWtsMINqrJLrRacOk9x` | Aria — 有表现力 |
+> | `lily` | `EXAVITQu4vr4xnSDxMaL` | Sarah — 友好 |
+> | `onyx` | `29vD33N1CtxCmqQRPOHJ` | Drew — 有力 |
+> | `sage` | `CwhRBWXzGAHq8TQ4Fs17` | Roger — 沉稳 |
+> | `verse` | `CYw3kZ02Hs0563khs1Fj` | Dave — 对话感 |
+>
+> **输出格式映射：** LiteLLM 自动将 OpenAI 格式名转换为 ElevenLabs 原生格式（`mp3` → `mp3_44100_128`、`pcm` → `pcm_44100`、`opus` → `opus_48000_128`）。`aac`、`flac`、`wav` 的支持取决于 LiteLLM 版本。
 
 ### 2.3 视频生成 (Volcengine ARK)
 
@@ -110,10 +127,10 @@ tapsvc-aigc image edit --model gpt-image-1.5 --image input.png --prompt-file edi
 | 参数 | 必须 | 默认值 | 说明 |
 |------|------|--------|------|
 | `--model, -m` | 是 | — | 模型名称 |
-| `--image` | 是 | — | 输入图片路径（PNG，< 4MB） |
+| `--image` | 是 | — | 输入图片路径（PNG/JPEG/WebP，< 25MB） |
 | `--prompt, -p` | 是* | — | 编辑提示词 |
 | `--prompt-file` | 否 | — | 从文件读取提示词，可与 `--prompt` 同时使用（file 内容在前拼接） |
-| `--mask` | 否 | — | 编辑区域蒙版（PNG，与输入图片同尺寸，透明区域为编辑区域） |
+| `--mask` | 否 | — | 编辑区域蒙版（PNG，< 4MB，与输入图片同尺寸，透明区域为编辑区域；仅 gpt-image-1.5 支持，Gemini 不支持） |
 | `--size` | 否 | `1024x1024` | 输出图片尺寸 |
 | `--n` | 否 | `1` | 生成数量 (1-10) |
 | `--response-format` | 否 | `png` | 输出图片格式 (`png`, `jpeg`, `webp`) |
@@ -142,12 +159,11 @@ tapsvc-aigc audio speech --model elevenlabs/eleven_multilingual_v2 --voice echo 
 | 参数 | 必须 | 默认值 | 说明 |
 |------|------|--------|------|
 | `--model, -m` | 是 | — | 模型名称 |
-| `--voice` | 是 | — | 语音名称 |
+| `--voice` | 是 | — | 语音名称（OpenAI 映射名如 `alloy`、`coral` 等，或 ElevenLabs Voice ID） |
 | `--input, -i` | 是* | — | 要转换的文本 |
 | `--input-file` | 否 | — | 从文件读取文本，与 `--input` 二选一 |
 | `--format` | 否 | `mp3` | 输出格式 (`mp3`, `opus`, `aac`, `flac`, `wav`, `pcm`) |
-| `--speed` | 否 | `1.0` | 语速 (0.25 - 4.0) |
-| `--instructions` | 否 | — | 语气风格控制 (如 `"Speak in a cheerful tone"`) |
+| `--speed` | 否 | `1.0` | 语速 |
 | `--output, -o` | 否 | 当前目录自动命名 | 输出文件路径 |
 
 ### 3.5 视频生成
@@ -215,11 +231,12 @@ Authorization: Bearer {api_key}
   "size": "1024x1024",
   "quality": "auto",
   "response_format": "b64_json",
+  "output_format": "png",
   "background": "auto"
 }
 ```
 
-> `response_format` 固定为 `"b64_json"`，确保返回 base64 编码的图片数据。CLI 的 `--response-format` 参数（`png`/`jpeg`/`webp`）仅控制输出文件扩展名。
+> `response_format` 固定为 `"b64_json"`，确保返回 base64 编码的图片数据。`output_format` 控制实际图片编码格式（`png`/`jpeg`/`webp`），由 CLI 的 `--response-format` 参数值映射而来，作为 provider kwargs 透传给 OpenAI。
 
 **响应：**
 ```json
@@ -255,10 +272,10 @@ mask=@mask.png          (可选)
 prompt=add a hat to the person
 n=1
 size=1024x1024
-response_format=b64_json
+output_format=png
 ```
 
-> `image` 和 `mask` 为文件上传字段。`mask` 中透明区域表示需要编辑的区域。
+> **不发 `response_format` 字段** — gpt-image-1.5 的 edit 端点不接受 `response_format` 参数（仅 dall-e-2 支持），gpt-image-1.5 默认返回 base64 编码。`image` 支持 PNG/JPEG/WebP 格式，< 25MB。`mask` 仅支持 PNG 格式，< 4MB，透明区域表示需要编辑的区域。`mask` 仅 gpt-image-1.5 支持，Gemini 模型传入 `--mask` 会被 LiteLLM 拒绝。`output_format` 控制输出图片编码格式，由 CLI 的 `--response-format` 参数值映射而来。
 
 **响应：**
 ```json
@@ -292,12 +309,11 @@ Authorization: Bearer {api_key}
   "input": "Hello, world!",
   "voice": "alloy",
   "response_format": "mp3",
-  "speed": 1.0,
-  "instructions": "Speak in a cheerful tone"
+  "speed": 1.0
 }
 ```
 
-> `instructions` 为可选字段，用于控制语气、情绪等风格。
+> `voice` 支持 OpenAI 映射名（如 `alloy`、`coral`）或 ElevenLabs 原生 Voice ID。LiteLLM 对不在映射表中的 voice 名称会原样透传给 ElevenLabs。
 
 **响应：** 二进制音频流 (`application/octet-stream`)
 

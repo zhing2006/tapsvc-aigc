@@ -31,6 +31,44 @@ pub enum Command {
 
 #[derive(Subcommand)]
 pub enum ImageCommand {
+    /// Edit an existing image
+    Edit {
+        /// Model name
+        #[arg(short, long)]
+        model: String,
+
+        /// Input image path (PNG/JPEG/WebP, < 25MB)
+        #[arg(long)]
+        image: String,
+
+        /// Text prompt
+        #[arg(short, long)]
+        prompt: Option<String>,
+
+        /// Read prompt from file
+        #[arg(long)]
+        prompt_file: Option<String>,
+
+        /// Mask image path (PNG only, < 4MB, transparent areas mark edit regions)
+        #[arg(long)]
+        mask: Option<String>,
+
+        /// Output image size
+        #[arg(long, default_value = "1024x1024")]
+        size: String,
+
+        /// Number of images to generate (1-10)
+        #[arg(short, long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=10))]
+        n: u32,
+
+        /// Output image format (png, jpeg, webp)
+        #[arg(long, default_value = "png")]
+        response_format: String,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<String>,
+    },
     /// Generate images from text prompt
     Generate {
         /// Model name
@@ -95,13 +133,9 @@ pub enum AudioCommand {
         #[arg(long, default_value = "mp3")]
         format: String,
 
-        /// Speech speed (0.25 - 4.0)
+        /// Speech speed
         #[arg(long, default_value_t = 1.0)]
         speed: f32,
-
-        /// Voice style instructions (e.g. "Speak in a cheerful tone")
-        #[arg(long)]
-        instructions: Option<String>,
 
         /// Output file path
         #[arg(short, long)]

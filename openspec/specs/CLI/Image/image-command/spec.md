@@ -80,8 +80,10 @@ CLI SHALL 从环境变量构造 `OpenAiClient` 并调用 `create_image` 方法�
 - **THEN** SHALL 从 `TAPSVC_BASE_URL` 和 `TAPSVC_API_KEY` 环境变量构造 `OpenAiClient`
 
 #### Scenario: 请求构建
-- **WHEN** 用户指定 `--model gpt-image-1.5 --prompt "a cat" --size 1024x1024 --n 2 --quality high --response-format png --background auto`
+- **WHEN** 用户指定 `--model gpt-image-1.5 --prompt "a cat" --size 1024x1024 --n 2 --quality high --response-format jpeg --background auto`
 - **THEN** SHALL 构建 `CreateImageRequest`，所有参数正确映射到请求字段
+- **AND** `output_format` SHALL 设置为 `--response-format` 的值（如 `"jpeg"`）
+- **AND** `response_format` SHALL 固定为 `"b64_json"`
 
 ### Requirement: 输出信息
 CLI SHALL 在生成成功后输出文件路径到 stdout。

@@ -23,7 +23,7 @@
 
 #### Scenario: reqwest feature 最小集
 - **WHEN** 检查 reqwest 的 features
-- **THEN** SHALL 仅包含 `rustls`、`json`、`stream`
+- **THEN** SHALL 包含 `rustls`、`json`、`stream`、`multipart`
 
 #### Scenario: clap feature 最小集
 - **WHEN** 检查 clap 的 features
