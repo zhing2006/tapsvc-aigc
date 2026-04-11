@@ -21,14 +21,21 @@ Execute **every step in order**. Do NOT skip any step.
 
 ### Step 0 — Preflight
 
-1. Check that `tapsvc-aigc` is available — try `${CLAUDE_SKILL_DIR}/scripts/tapsvc-aigc --help`,
-   then fall back to `tapsvc-aigc --help` in PATH.
+1. Check that `tapsvc-aigc` is available:
+   - If your platform provides a skill directory variable (e.g. `${CLAUDE_SKILL_DIR}`),
+     try `<skill-dir>/scripts/tapsvc-aigc --help` (on Windows: `tapsvc-aigc.exe`).
+   - If that fails or no skill directory variable exists, fall back to PATH.
+   - Only fail if both checks find nothing.
 2. If no `.env` file exists in the working directory, check that `TAPSVC_BASE_URL`
    and `TAPSVC_API_KEY` are set. If `.env` exists, skip this check — the CLI
    loads it automatically at startup.
 
 If the binary is not found, or env vars are missing without a `.env`, **stop**
 and tell the user what is missing.
+
+**Important**: Run the CLI from the current working directory — do NOT cd into
+the skill directory. The CLI loads `.env` from CWD and writes output files
+to CWD.
 
 ### Step 1 — Optimize Prompt
 
@@ -49,13 +56,3 @@ Build and run the command per the reference file read in Step 1.
 - If a delivery channel is available (file transfer, message push, etc.),
   send the result through it.
 - Otherwise, report the output file path and relevant details.
-
-## Installation
-
-This skill is in development. To use it:
-
-1. Copy or symlink `skills/tapsvc-aigc/` to `~/.claude/skills/tapsvc-aigc/`
-2. Or use `--add-dir` to include this directory
-
-A future install script will place the `tapsvc-aigc` binary in `scripts/`
-and register the skill automatically.

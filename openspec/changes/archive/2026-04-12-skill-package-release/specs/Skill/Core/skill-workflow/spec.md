@@ -1,8 +1,4 @@
-## Purpose
-
-Define the core skill workflow including preflight checks, prompt optimization, command execution, and result delivery for AIGC tasks.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Preflight 环境检查
 

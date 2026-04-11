@@ -21,23 +21,28 @@ jobs:
           - target: x86_64-pc-windows-msvc
             runner: windows-latest
             binary: tapsvc-aigc.exe
-            asset: tapsvc-aigc-win32-x64.exe
+            asset: tapsvc-aigc-skill-win32-x64.zip
+            archive: zip
           - target: x86_64-unknown-linux-musl
             runner: ubuntu-latest
             binary: tapsvc-aigc
-            asset: tapsvc-aigc-linux-x64
+            asset: tapsvc-aigc-skill-linux-x64.tar.gz
+            archive: tar.gz
           - target: aarch64-unknown-linux-musl
             runner: ubuntu-latest
             binary: tapsvc-aigc
-            asset: tapsvc-aigc-linux-arm64
+            asset: tapsvc-aigc-skill-linux-arm64.tar.gz
+            archive: tar.gz
           - target: x86_64-apple-darwin
             runner: macos-latest
             binary: tapsvc-aigc
-            asset: tapsvc-aigc-darwin-x64
+            asset: tapsvc-aigc-skill-darwin-x64.tar.gz
+            archive: tar.gz
           - target: aarch64-apple-darwin
             runner: macos-latest
             binary: tapsvc-aigc
-            asset: tapsvc-aigc-darwin-arm64
+            asset: tapsvc-aigc-skill-darwin-arm64.tar.gz
+            archive: tar.gz
 
     steps:
       - uses: actions/checkout@v5
@@ -68,16 +73,29 @@ jobs:
         if: matrix.target == 'x86_64-pc-windows-msvc' || matrix.target == 'x86_64-unknown-linux-musl'
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Prepare artifact (Unix)
+      - name: Package skill (Unix)
         if: runner.os != 'Windows'
         run: |
-          cp target/${{ matrix.target }}/release/${{ matrix.binary }} ${{ matrix.asset }}
-          chmod +x ${{ matrix.asset }}
+          mkdir -p tapsvc-aigc/scripts
+          cp -r skills/tapsvc-aigc/SKILL.md tapsvc-aigc/
+          cp -r skills/tapsvc-aigc/references tapsvc-aigc/
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} tapsvc-aigc/scripts/
+          chmod +x tapsvc-aigc/scripts/${{ matrix.binary }}
+          tar czf ${{ matrix.asset }} tapsvc-aigc/
 
-      - name: Prepare artifact (Windows)
+      - name: Package skill (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: cp target/${{ matrix.target }}/release/${{ matrix.binary }} ${{ matrix.asset }}
+        run: |
+          mkdir -p tapsvc-aigc/scripts
+          cp skills/tapsvc-aigc/SKILL.md tapsvc-aigc/
+          cp -r skills/tapsvc-aigc/references tapsvc-aigc/
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} tapsvc-aigc/scripts/
+
+      - name: Create zip (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path tapsvc-aigc -DestinationPath ${{ matrix.asset }}
 
       - uses: actions/upload-artifact@v7
         with:
