@@ -74,7 +74,7 @@ tapsvc-aigc image generate --model gemini-3.1-flash-image-preview --prompt-file 
 |------|------|--------|------|
 | `--model, -m` | 是 | — | 模型名称 |
 | `--prompt, -p` | 是* | — | 生成提示词 |
-| `--prompt-file` | 否 | — | 从文件读取提示词，与 `--prompt` 二选一 |
+| `--prompt-file` | 否 | — | 从文件读取提示词，可与 `--prompt` 同时使用（file 内容在前拼接） |
 | `--size` | 否 | `1024x1024` | 图片尺寸 (`1024x1024`, `1536x1024`, `1024x1536`, `auto`) |
 | `--n` | 否 | `1` | 生成数量 (1-10) |
 | `--quality` | 否 | `auto` | 质量级别 (`auto`, `high`, `medium`, `low`) |
@@ -168,7 +168,7 @@ tapsvc-aigc video generate \
 
 **请求：**
 ```json
-POST {base_url}/images/generations
+POST {base_url}/v1/images/generations
 Authorization: Bearer {api_key}
 
 {
@@ -198,7 +198,7 @@ Authorization: Bearer {api_key}
 ```
 
 **CLI 逻辑：**
-1. 构建请求体，POST 到 `{base_url}/images/generations`
+1. 构建请求体，POST 到 `{base_url}/v1/images/generations`
 2. 解析响应，base64 解码 `b64_json` 后写入文件
 3. 多张图片时输出为 `output_1.png`, `output_2.png`, ...
 
@@ -208,7 +208,7 @@ Authorization: Bearer {api_key}
 
 **请求：**
 ```json
-POST {base_url}/audio/speech
+POST {base_url}/v1/audio/speech
 Authorization: Bearer {api_key}
 
 {
@@ -226,7 +226,7 @@ Authorization: Bearer {api_key}
 **响应：** 二进制音频流 (`application/octet-stream`)
 
 **CLI 逻辑：**
-1. 构建请求体，POST 到 `{base_url}/audio/speech`
+1. 构建请求体，POST 到 `{base_url}/v1/audio/speech`
 2. 以流式方式接收响应 body
 3. 直接写入输出文件
 
@@ -242,7 +242,7 @@ seedance-2.0-lite → doubao-seedance-2-0-fast-260128
 
 **步骤 1 — 提交任务：**
 ```json
-POST {base_url}/contents/generations/tasks
+POST {base_url}/volcengine/api/v3/contents/generations/tasks
 Authorization: Bearer {api_key}
 
 {
@@ -263,7 +263,7 @@ Authorization: Bearer {api_key}
 
 **步骤 2 — 轮询状态：**
 ```
-GET {base_url}/contents/generations/tasks/{task_id}
+GET {base_url}/volcengine/api/v3/contents/generations/tasks/{task_id}
 Authorization: Bearer {api_key}
 ```
 
@@ -279,7 +279,7 @@ Authorization: Bearer {api_key}
 
 ## 5. Workspace 与 Crate 结构
 
-项目采用 Cargo workspace，拆分为 3 个 crate，Rust edition 统一使用 **2024**。
+项目采用 Cargo workspace，拆分为 4 个 crate，Rust edition 统一使用 **2024**。
 
 ### 5.1 Workspace 布局
 
@@ -299,6 +299,12 @@ tapsvc-aigc/
 │   │           ├── image.rs      # image 子命令处理
 │   │           ├── audio.rs      # audio 子命令处理
 │   │           └── video.rs      # video 子命令处理
+│   │
+│   ├── tapsvc-aigc-core/          # 共享基础层 library crate
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs            # 公开 API
+│   │       └── retry.rs          # 通用 retry 执行器（指数退避 + jitter）
 │   │
 │   ├── tapsvc-aigc-openai/       # OpenAI 兼容客户端 library crate
 │   │   ├── Cargo.toml
@@ -328,6 +334,7 @@ tapsvc-aigc/
 resolver = "3"
 members = [
     "crates/tapsvc-aigc",
+    "crates/tapsvc-aigc-core",
     "crates/tapsvc-aigc-openai",
     "crates/tapsvc-aigc-ark",
 ]
@@ -434,6 +441,7 @@ tokio = { workspace = true, features = ["time"] }
 | Crate | 类型 | 职责 |
 |-------|------|------|
 | `tapsvc-aigc` | binary | CLI 交互、参数解析、文件 I/O、进度展示 |
+| `tapsvc-aigc-core` | library | 共享基础层：通用 retry 执行器（指数退避 + jitter + Retry-After） |
 | `tapsvc-aigc-openai` | library | OpenAI 兼容 API 的类型定义和 HTTP 调用（images + audio） |
 | `tapsvc-aigc-ark` | library | Volcengine ARK API 的类型定义和 HTTP 调用（video） |
 
@@ -444,9 +452,10 @@ tokio = { workspace = true, features = ["time"] }
 
 | 场景 | 处理方式 |
 |------|----------|
-| 网络错误 / 代理不可达 | 重试 3 次，指数退避，最终报错退出 |
-| API 返回 4xx | 解析错误信息，展示给用户 |
-| API 返回 429 (限流) | 重试，使用 `Retry-After` header |
+| 网络错误 / 代理不可达 | 自动重试，最多 3 次重试（总尝试 4 次），指数退避 2s→4s→8s + 随机 jitter，最终报错退出 |
+| API 返回 4xx（非 429） | 不重试，解析错误信息，展示给用户 |
+| API 返回 429 (限流) | 自动重试，优先使用 `Retry-After` header 的延迟值 |
+| API 返回 500/502/503/504 | 自动重试，同网络错误退避策略 |
 | 视频生成超时 | 输出 task_id，告知用户可稍后手动查询 |
 | 输出文件已存在 | 默认覆盖，可加 `--no-overwrite` 选项 |
 | 视频 URL 过期 | 提示 24 小时有效期限制 |

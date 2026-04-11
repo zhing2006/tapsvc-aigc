@@ -49,8 +49,8 @@ pub enum ImageCommand {
         #[arg(long, default_value = "1024x1024")]
         size: String,
 
-        /// Number of images to generate
-        #[arg(short, long, default_value_t = 1)]
+        /// Number of images to generate (1-10)
+        #[arg(short, long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=10))]
         n: u32,
 
         /// Quality level (auto, high, medium, low)

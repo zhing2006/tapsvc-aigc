@@ -4,6 +4,7 @@ members = [
     "crates/tapsvc-aigc",
     "crates/tapsvc-aigc-openai",
     "crates/tapsvc-aigc-ark",
+    "crates/tapsvc-aigc-core",
 ]
 
 [workspace.package]
@@ -42,7 +43,14 @@ indicatif = { version = "0.18", default-features = false }
 # Encoding
 base64 = { version = "0.22", default-features = false }
 
+# Random
+rand = { version = "0.10", default-features = false, features = ["thread_rng"] }
+
+# Date/time
+chrono = { version = "0.4", default-features = false, features = ["clock", "alloc"] }
+
 # Workspace crates
+tapsvc-aigc-core = { path = "crates/tapsvc-aigc-core" }
 tapsvc-aigc-openai = { path = "crates/tapsvc-aigc-openai" }
 tapsvc-aigc-ark = { path = "crates/tapsvc-aigc-ark" }
 
