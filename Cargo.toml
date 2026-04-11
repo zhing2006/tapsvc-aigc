@@ -1,0 +1,53 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/tapsvc-aigc",
+    "crates/tapsvc-aigc-openai",
+    "crates/tapsvc-aigc-ark",
+]
+
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/zhing2006/tapsvc-aigc"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "fs", "signal"] }
+
+# HTTP client
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
+
+# Serialization
+serde = { version = "1", default-features = false, features = ["derive"] }
+serde_json = { version = "1", default-features = false }
+
+# Error handling
+thiserror = { version = "2.0", default-features = false }
+anyhow = { version = "1", default-features = false }
+
+# Logging
+tracing = { version = "0.1", default-features = false }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt"] }
+
+# CLI
+clap = { version = "4.6", default-features = false, features = ["std", "derive", "env", "help", "usage", "error-context"] }
+
+# Env
+dotenvy = { version = "0.15", default-features = false }
+
+# Progress display
+indicatif = { version = "0.18", default-features = false }
+
+# Encoding
+base64 = { version = "0.22", default-features = false }
+
+# Workspace crates
+tapsvc-aigc-openai = { path = "crates/tapsvc-aigc-openai" }
+tapsvc-aigc-ark = { path = "crates/tapsvc-aigc-ark" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
