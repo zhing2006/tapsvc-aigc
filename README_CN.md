@@ -51,18 +51,15 @@ Invoke-WebRequest -Uri $asset.browser_download_url -OutFile <PACKAGE_NAME>
 
 ### 3. 解压到技能目录
 
-将包解压到 Agent 平台的技能目录。压缩包内包含 `tapsvc-aigc/` 顶层目录，可直接放入技能目录。
+将包解压到当前环境的技能目录。`<skills-dir>` 是 Agent 平台存放所有已安装技能的目录。压缩包内包含 `tapsvc-aigc/` 顶层目录，可直接放入技能目录。
 
-**Claude Code:**
 ```bash
 # tar.gz (Linux/macOS)
-tar xzf <PACKAGE_NAME> -C ~/.claude/skills/
+tar xzf <PACKAGE_NAME> -C <skills-dir>/
 
 # zip (Windows, PowerShell)
-Expand-Archive -Path <PACKAGE_NAME> -DestinationPath $env:USERPROFILE\.claude\skills\ -Force
+Expand-Archive -Path <PACKAGE_NAME> -DestinationPath <skills-dir>\ -Force
 ```
-
-**其他 Agent 平台:** 解压到你的平台的技能目录。
 
 更新已有安装时，直接解压覆盖现有的 `tapsvc-aigc/` 目录即可。
 
@@ -72,10 +69,10 @@ Expand-Archive -Path <PACKAGE_NAME> -DestinationPath $env:USERPROFILE\.claude\sk
 
 ```bash
 # Linux/macOS
-<skill-dir>/tapsvc-aigc/scripts/tapsvc-aigc --help
+<skills-dir>/tapsvc-aigc/scripts/tapsvc-aigc --help
 
 # Windows
-<skill-dir>\tapsvc-aigc\scripts\tapsvc-aigc.exe --help
+<skills-dir>\tapsvc-aigc\scripts\tapsvc-aigc.exe --help
 ```
 
 命令成功执行则表示技能已安装就绪。

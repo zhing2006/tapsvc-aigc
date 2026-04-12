@@ -51,18 +51,15 @@ Invoke-WebRequest -Uri $asset.browser_download_url -OutFile <PACKAGE_NAME>
 
 ### 3. Extract to Skill Directory
 
-Extract the package to your Agent platform's skill directory. The archive contains a `tapsvc-aigc/` top-level directory that can be placed directly into the skill directory.
+Extract the package to the skill directory of your current environment. `<skills-dir>` is the directory where the Agent platform stores all installed skills. The archive contains a `tapsvc-aigc/` top-level directory that can be placed directly into the skill directory.
 
-**Claude Code:**
 ```bash
 # tar.gz (Linux/macOS)
-tar xzf <PACKAGE_NAME> -C ~/.claude/skills/
+tar xzf <PACKAGE_NAME> -C <skills-dir>/
 
 # zip (Windows, PowerShell)
-Expand-Archive -Path <PACKAGE_NAME> -DestinationPath $env:USERPROFILE\.claude\skills\ -Force
+Expand-Archive -Path <PACKAGE_NAME> -DestinationPath <skills-dir>\ -Force
 ```
-
-**Other Agent platforms:** Extract to your platform's skill directory.
 
 When updating an existing installation, extract over the existing `tapsvc-aigc/` directory to overwrite all files.
 
@@ -72,10 +69,10 @@ Run the CLI to confirm the binary is executable:
 
 ```bash
 # Linux/macOS
-<skill-dir>/tapsvc-aigc/scripts/tapsvc-aigc --help
+<skills-dir>/tapsvc-aigc/scripts/tapsvc-aigc --help
 
 # Windows
-<skill-dir>\tapsvc-aigc\scripts\tapsvc-aigc.exe --help
+<skills-dir>\tapsvc-aigc\scripts\tapsvc-aigc.exe --help
 ```
 
 If the command succeeds, the skill is installed and ready.
