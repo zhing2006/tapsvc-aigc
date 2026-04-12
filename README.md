@@ -62,11 +62,7 @@ tar xzf <PACKAGE_NAME> -C ~/.claude/skills/
 Expand-Archive -Path <PACKAGE_NAME> -DestinationPath $env:USERPROFILE\.claude\skills\ -Force
 ```
 
-**Other Agent platforms:** Extract to your platform's skill directory. If your platform does not provide a skill directory variable or does not automatically resolve paths within installed skills, add `tapsvc-aigc/scripts/` to your PATH:
-
-```bash
-export PATH="<skill-dir>/tapsvc-aigc/scripts:$PATH"
-```
+**Other Agent platforms:** Extract to your platform's skill directory.
 
 When updating an existing installation, extract over the existing `tapsvc-aigc/` directory to overwrite all files.
 

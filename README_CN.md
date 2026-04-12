@@ -62,11 +62,7 @@ tar xzf <PACKAGE_NAME> -C ~/.claude/skills/
 Expand-Archive -Path <PACKAGE_NAME> -DestinationPath $env:USERPROFILE\.claude\skills\ -Force
 ```
 
-**其他 Agent 平台:** 解压到你的平台的技能目录。如果平台不提供技能目录变量或不会自动解析已安装技能内的路径，需要将 `tapsvc-aigc/scripts/` 加入 PATH：
-
-```bash
-export PATH="<skill-dir>/tapsvc-aigc/scripts:$PATH"
-```
+**其他 Agent 平台:** 解压到你的平台的技能目录。
 
 更新已有安装时，直接解压覆盖现有的 `tapsvc-aigc/` 目录即可。
 
