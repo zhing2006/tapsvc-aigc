@@ -53,6 +53,25 @@ Invoke-WebRequest -Uri $asset.browser_download_url -OutFile <PACKAGE_NAME>
 
 将包解压到当前环境的技能目录。`<skills-dir>` 是 Agent 平台存放所有已安装技能的目录。压缩包内包含 `tapsvc-aigc/` 顶层目录，可直接放入技能目录。
 
+#### 各 Agent 平台的 `<skills-dir>` 路径
+
+| Agent 平台 | 作用域 | `<skills-dir>` 路径 |
+|---|---|---|
+| **Claude Code** | 个人（全局） | `~/.claude/skills` |
+| **Claude Code** | 项目级 | `<project-root>/.claude/skills` |
+| **Codex** | 个人（全局） | `~/.agents/skills` |
+| **Codex** | 项目级 | `<repo-root>/.agents/skills` |
+| **Codex** | 系统级 | `/etc/codex/skills` |
+| **OpenClaw** | 工作区 | `<workspace>/skills` |
+| **OpenClaw** | 个人（全局） | `~/.openclaw/skills` |
+| **OpenClaw** | Docker 容器内 | `/home/node/.openclaw/skills` |
+| **Hermes Agent** | 个人（全局） | `~/.hermes/skills` |
+| **Hermes Agent** | Docker 容器内 | `/opt/data/skills` |
+
+> **Docker 部署说明：**
+> - **OpenClaw** — 宿主机 `~/.openclaw` 通过 bind-mount 映射到容器内 `/home/node/.openclaw`。技能目录结构和优先级与直接安装完全一致，唯一区别是挂载边界。如果技能依赖外部二进制文件，需通过 `agents.defaults.sandbox.docker.setupCommand` 安装。
+> - **Hermes Agent** — 宿主机 `~/.hermes` 通过 bind-mount 映射到容器内 `/opt/data`。技能以只读卷方式自动挂载，技能声明的凭证文件也会自动挂载。技能数据通过此挂载在容器重启后持久保留。
+
 ```bash
 # tar.gz (Linux/macOS)
 tar xzf <PACKAGE_NAME> -C <skills-dir>/

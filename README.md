@@ -53,6 +53,25 @@ Invoke-WebRequest -Uri $asset.browser_download_url -OutFile <PACKAGE_NAME>
 
 Extract the package to the skill directory of your current environment. `<skills-dir>` is the directory where the Agent platform stores all installed skills. The archive contains a `tapsvc-aigc/` top-level directory that can be placed directly into the skill directory.
 
+#### `<skills-dir>` by Agent Platform
+
+| Agent Platform | Scope | `<skills-dir>` Path |
+|---|---|---|
+| **Claude Code** | Personal (global) | `~/.claude/skills` |
+| **Claude Code** | Project | `<project-root>/.claude/skills` |
+| **Codex** | Personal (global) | `~/.agents/skills` |
+| **Codex** | Project | `<repo-root>/.agents/skills` |
+| **Codex** | System | `/etc/codex/skills` |
+| **OpenClaw** | Workspace | `<workspace>/skills` |
+| **OpenClaw** | Personal (global) | `~/.openclaw/skills` |
+| **OpenClaw** | Docker | `/home/node/.openclaw/skills` (container) |
+| **Hermes Agent** | Personal (global) | `~/.hermes/skills` |
+| **Hermes Agent** | Docker | `/opt/data/skills` (container) |
+
+> **Docker deployment notes:**
+> - **OpenClaw** — Host `~/.openclaw` is bind-mounted to `/home/node/.openclaw` inside the container. Skill directory structure and precedence are identical to a direct install; the only difference is the mount boundary. If skills depend on external binaries, they must be installed via `agents.defaults.sandbox.docker.setupCommand`.
+> - **Hermes Agent** — Host `~/.hermes` is bind-mounted to `/opt/data` inside the container. Skills are auto-mounted as read-only volumes. Credential files declared by skills are also mounted automatically. Skills persist across container restarts via this mount.
+
 ```bash
 # tar.gz (Linux/macOS)
 tar xzf <PACKAGE_NAME> -C <skills-dir>/
