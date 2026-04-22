@@ -2,14 +2,14 @@
 
 ## Models
 
-| Feature | gpt-image-1.5 (DEFAULT) | gemini-3-pro-image-preview | gemini-3.1-flash-image-preview |
-|---------|------------------------|---------------------------|-------------------------------|
-| Count | n=1 only | n=1 only | n=1 only |
-| size | `1024x1024`, `1536x1024`, `1024x1536`, `auto` | mapped to aspectRatio | mapped to aspectRatio |
-| quality | `auto`, `high`, `medium`, `low` | not supported | not supported |
-| background | `transparent`, `opaque`, `auto` | not supported | not supported |
-| mask edit | supported (PNG, < 4MB) | not supported | not supported |
-| text rendering | strong | moderate | moderate |
+| Feature | gpt-image-2 (DEFAULT) | gpt-image-1.5 | gemini-3-pro-image-preview | gemini-3.1-flash-image-preview |
+|---------|----------------------|---------------|---------------------------|-------------------------------|
+| Count | n=1 only | n=1 only | n=1 only | n=1 only |
+| size | `auto` only (router decides; bias via prompt) | `1024x1024`, `1536x1024`, `1024x1536`, `auto` | mapped to aspectRatio | mapped to aspectRatio |
+| quality | `auto`, `high`, `medium`, `low` | `auto`, `high`, `medium`, `low` | not supported | not supported |
+| background | `auto` / `opaque` only — `transparent` rejected, describe in prompt | `transparent`, `opaque`, `auto` | not supported | not supported |
+| mask edit | not supported | supported (PNG, < 4MB) | not supported | not supported |
+| text rendering | strongest, multilingual | strong | moderate | moderate |
 
 > **Important**: All models support `n=1` only (litellm proxy limitation).
 > For multiple images, execute the command multiple times with different prompts or params.
@@ -17,19 +17,52 @@
 > **Important**: Mask editing is `gpt-image-1.5` only. When mask editing is
 > requested, MUST switch to `gpt-image-1.5` regardless of user's model choice.
 
+> **gpt-image-2 size**: only `--size auto` (the new default) is accepted. The
+> router chooses output dimensions; bias the aspect ratio in the prompt instead
+> (`square composition` / `portrait composition` / `wide landscape 16:9`).
+> Passing an explicit `WxH` will be rejected by the proxy.
+
+> **gpt-image-2 background**: `--background transparent` is rejected. To get a
+> transparent subject, describe it in the prompt (e.g.
+> `transparent background, isolated subject on alpha channel, no backdrop`),
+> or fall back to `gpt-image-1.5 --background transparent` for a parameter-level
+> guarantee.
+
 ## CLI Usage
 
 ```bash
 # Image generation
 tapsvc-aigc image generate -m <model> -p <prompt> [--prompt-file <path>] \
-  [--size <WxH>] [--quality <auto|high|medium|low>] \
+  [--size <auto|WxH>] [--quality <auto|high|medium|low>] \
   [--background <transparent|opaque|auto>] [--response-format <png|jpeg|webp>] \
   [-o <output>]
 
 # Image editing
 tapsvc-aigc image edit -m <model> --image <path> -p <prompt> [--prompt-file <path>] \
-  [--mask <path>] [--size <WxH>] [--response-format <png|jpeg|webp>] \
+  [--mask <path>] [--size <auto|WxH>] [--response-format <png|jpeg|webp>] \
   [-o <output>]
+```
+
+`--size` defaults to `auto`; when `auto`, the field is omitted from the request
+(required for gpt-image-2, accepted by all other models).
+
+### Quick examples
+
+```bash
+# gpt-image-2 (default) — bias aspect ratio via prompt, no --size
+tapsvc-aigc image generate -m gpt-image-2 \
+  -p "A ginger tabby cat in a sunlit window, square composition" \
+  -o cat.png
+
+# gpt-image-1.5 — explicit WxH still works
+tapsvc-aigc image generate -m gpt-image-1.5 \
+  -p "wide cinematic landscape of misty mountains at sunrise" \
+  --size 1536x1024 -o mountains.png
+
+# Transparent sticker — must use gpt-image-1.5
+tapsvc-aigc image generate -m gpt-image-1.5 \
+  -p "cute cartoon robot mascot, flat design, sticker" \
+  --background transparent -o robot.png
 ```
 
 ## Prompt Best Practices — Generation

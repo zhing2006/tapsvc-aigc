@@ -159,6 +159,42 @@ impl OpenAiClient {
         .await
     }
 
+    pub async fn download_bytes(&self, url: &str) -> Result<Vec<u8>, Error> {
+        let url = url.to_string();
+
+        retry(&self.retry_config, || {
+            let url = url.clone();
+            async move {
+                let response = self.http.get(&url).send().await?;
+
+                let status = response.status();
+                if !status.is_success() {
+                    let retry_after = response
+                        .headers()
+                        .get("retry-after")
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|v| v.parse::<u64>().ok())
+                        .map(Duration::from_secs);
+
+                    let message = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| String::from("unknown error"));
+
+                    return Err(Error::Api {
+                        status: status.as_u16(),
+                        message,
+                        retry_after,
+                    });
+                }
+
+                let bytes = response.bytes().await?;
+                Ok(bytes.to_vec())
+            }
+        })
+        .await
+    }
+
     pub async fn create_image(&self, req: &CreateImageRequest) -> Result<ImageResponse, Error> {
         let url = format!(
             "{}/v1/images/generations",

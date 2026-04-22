@@ -6,7 +6,7 @@ AIGC content generation Agent Skill. Generates images, audio speech, and videos 
 
 ## Supported Capabilities
 
-- **Image generation & editing** — gpt-image-1.5, gemini-3-pro-image-preview, gemini-3.1-flash-image-preview
+- **Image generation & editing** — gpt-image-2 (default), gpt-image-1.5, gemini-3-pro-image-preview, gemini-3.1-flash-image-preview
 - **Audio speech synthesis** — elevenlabs/eleven_v3, elevenlabs/eleven_multilingual_v2
 - **Video generation** — doubao-seedance-2-0-fast-260128, doubao-seedance-2-0-260128
 

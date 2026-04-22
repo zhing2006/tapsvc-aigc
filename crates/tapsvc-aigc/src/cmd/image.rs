@@ -34,7 +34,7 @@ pub async fn handle(command: ImageCommand) -> anyhow::Result<()> {
                 model,
                 prompt: final_prompt,
                 n: Some(n),
-                size: Some(size),
+                size: size_to_param(&size),
                 quality: Some(quality),
                 response_format: Some("b64_json".to_string()),
                 background: Some(background),
@@ -60,31 +60,37 @@ pub async fn handle(command: ImageCommand) -> anyhow::Result<()> {
                     eprintln!("[image {}] revised prompt: {}", i + 1, revised);
                 }
 
-                match &item.b64_json {
-                    Some(data) => {
-                        let bytes = BASE64.decode(data).with_context(|| {
-                            format!("failed to decode base64 for image {}", i + 1)
-                        })?;
+                let bytes = if let Some(data) = &item.b64_json {
+                    BASE64
+                        .decode(data)
+                        .with_context(|| format!("failed to decode base64 for image {}", i + 1))?
+                } else if let Some(url) = &item.url {
+                    client
+                        .download_bytes(url)
+                        .await
+                        .with_context(|| format!("failed to download image {} from url", i + 1))?
+                } else {
+                    eprintln!(
+                        "warning: image {} has neither b64_json nor url, skipping",
+                        i + 1
+                    );
+                    continue;
+                };
 
-                        if let Some(parent) = path.parent()
-                            && !parent.as_os_str().is_empty()
-                        {
-                            tokio::fs::create_dir_all(parent).await.with_context(|| {
-                                format!("failed to create directory {}", parent.display())
-                            })?;
-                        }
-
-                        tokio::fs::write(path, &bytes)
-                            .await
-                            .with_context(|| format!("failed to write {}", path.display()))?;
-
-                        println!("{}", path.display());
-                        written += 1;
-                    }
-                    None => {
-                        eprintln!("warning: image {} has no data, skipping", i + 1);
-                    }
+                if let Some(parent) = path.parent()
+                    && !parent.as_os_str().is_empty()
+                {
+                    tokio::fs::create_dir_all(parent).await.with_context(|| {
+                        format!("failed to create directory {}", parent.display())
+                    })?;
                 }
+
+                tokio::fs::write(path, &bytes)
+                    .await
+                    .with_context(|| format!("failed to write {}", path.display()))?;
+
+                println!("{}", path.display());
+                written += 1;
             }
 
             if written == 0 {
@@ -148,7 +154,7 @@ pub async fn handle(command: ImageCommand) -> anyhow::Result<()> {
                 mask_bytes,
                 mask_filename,
                 n: Some(n),
-                size: Some(size),
+                size: size_to_param(&size),
                 output_format: Some(response_format.clone()),
             };
 
@@ -171,31 +177,37 @@ pub async fn handle(command: ImageCommand) -> anyhow::Result<()> {
                     eprintln!("[image {}] revised prompt: {}", i + 1, revised);
                 }
 
-                match &item.b64_json {
-                    Some(data) => {
-                        let bytes = BASE64.decode(data).with_context(|| {
-                            format!("failed to decode base64 for image {}", i + 1)
-                        })?;
+                let bytes = if let Some(data) = &item.b64_json {
+                    BASE64
+                        .decode(data)
+                        .with_context(|| format!("failed to decode base64 for image {}", i + 1))?
+                } else if let Some(url) = &item.url {
+                    client
+                        .download_bytes(url)
+                        .await
+                        .with_context(|| format!("failed to download image {} from url", i + 1))?
+                } else {
+                    eprintln!(
+                        "warning: image {} has neither b64_json nor url, skipping",
+                        i + 1
+                    );
+                    continue;
+                };
 
-                        if let Some(parent) = path.parent()
-                            && !parent.as_os_str().is_empty()
-                        {
-                            tokio::fs::create_dir_all(parent).await.with_context(|| {
-                                format!("failed to create directory {}", parent.display())
-                            })?;
-                        }
-
-                        tokio::fs::write(path, &bytes)
-                            .await
-                            .with_context(|| format!("failed to write {}", path.display()))?;
-
-                        println!("{}", path.display());
-                        written += 1;
-                    }
-                    None => {
-                        eprintln!("warning: image {} has no data, skipping", i + 1);
-                    }
+                if let Some(parent) = path.parent()
+                    && !parent.as_os_str().is_empty()
+                {
+                    tokio::fs::create_dir_all(parent).await.with_context(|| {
+                        format!("failed to create directory {}", parent.display())
+                    })?;
                 }
+
+                tokio::fs::write(path, &bytes)
+                    .await
+                    .with_context(|| format!("failed to write {}", path.display()))?;
+
+                println!("{}", path.display());
+                written += 1;
             }
 
             if written == 0 {
@@ -204,6 +216,14 @@ pub async fn handle(command: ImageCommand) -> anyhow::Result<()> {
 
             Ok(())
         }
+    }
+}
+
+fn size_to_param(size: &str) -> Option<String> {
+    if size == "auto" {
+        None
+    } else {
+        Some(size.to_string())
     }
 }
 

@@ -53,8 +53,8 @@ pub enum ImageCommand {
         #[arg(long)]
         mask: Option<String>,
 
-        /// Output image size
-        #[arg(long, default_value = "1024x1024")]
+        /// Output image size (`auto` lets the model/router decide; required for gpt-image-2)
+        #[arg(long, default_value = "auto")]
         size: String,
 
         /// Number of images to generate (1-10)
@@ -83,8 +83,8 @@ pub enum ImageCommand {
         #[arg(long)]
         prompt_file: Option<String>,
 
-        /// Image size
-        #[arg(long, default_value = "1024x1024")]
+        /// Image size (`auto` lets the model/router decide; required for gpt-image-2)
+        #[arg(long, default_value = "auto")]
         size: String,
 
         /// Number of images to generate (1-10)

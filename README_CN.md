@@ -6,7 +6,7 @@ AIGC 内容生成 Agent 技能。通过 `tapsvc-aigc` CLI 生成图片、语音�
 
 ## 支持的能力
 
-- **图片生成与编辑** — gpt-image-1.5、gemini-3-pro-image-preview、gemini-3.1-flash-image-preview
+- **图片生成与编辑** — gpt-image-2（默认）、gpt-image-1.5、gemini-3-pro-image-preview、gemini-3.1-flash-image-preview
 - **语音合成** — elevenlabs/eleven_v3、elevenlabs/eleven_multilingual_v2
 - **视频生成** — doubao-seedance-2-0-fast-260128、doubao-seedance-2-0-260128
 

@@ -14,9 +14,15 @@ tapsvc-aigc 是一个 Rust CLI 工具，通过 OpenAI 兼容代理调用多种 A
 
 | 模型 | 提供商 | 说明 |
 |------|--------|------|
-| `gpt-image-1.5` | OpenAI | OpenAI 最新图片生成模型 |
+| `gpt-image-2` | OpenAI | 新一代图片生成模型（默认）— 文本渲染、多语种、色彩中性度更好；仅接受 `size=auto`，不支持 `background=transparent` |
+| `gpt-image-1.5` | OpenAI | 上一代旗舰；需要参数级 `background=transparent` 或固定尺寸时使用 |
 | `gemini-3-pro-image-preview` | Google | Gemini 3 Pro 图片生成 |
 | `gemini-3.1-flash-image-preview` | Google | Gemini 3.1 Flash 图片生成 |
+
+> **gpt-image-2 限制：**
+> - **`size` 仅接受 `auto`** — 路由层自动选择尺寸，显式 `WxH` 会被代理拒绝；通过 prompt 措辞（"square composition" / "portrait" / "wide landscape 16:9"）引导比例
+> - **`background` 不支持 `transparent`** — 透明背景请写进 prompt（"transparent background, isolated subject on alpha channel"），或回退到 `gpt-image-1.5`
+> - **响应可能为 URL** — 某些代理路由会把 gpt-image-2 输出放到对象存储并仅回 `url`，CLI 会自动下载
 
 > **LiteLLM 代理下 Gemini 模型的已知限制：**
 > - **`n` 只支持 1** — Gemini 图片生成仅支持单张输出，`n > 1` 会返回 400 错误
@@ -95,7 +101,7 @@ tapsvc-aigc image generate --model gemini-3.1-flash-image-preview --prompt-file 
 | `--model, -m` | 是 | — | 模型名称 |
 | `--prompt, -p` | 是* | — | 生成提示词 |
 | `--prompt-file` | 否 | — | 从文件读取提示词，可与 `--prompt` 同时使用（file 内容在前拼接） |
-| `--size` | 否 | `1024x1024` | 图片尺寸 (`1024x1024`, `1536x1024`, `1024x1536`, `auto`) |
+| `--size` | 否 | `auto` | 图片尺寸 (`auto`, `1024x1024`, `1536x1024`, `1024x1536`)。`auto` 时不发送字段，由代理/模型决定；**gpt-image-2 仅接受 `auto`** |
 | `--n` | 否 | `1` | 生成数量 (1-10) |
 | `--quality` | 否 | `auto` | 质量级别 (`auto`, `high`, `medium`, `low`) |
 | `--response-format` | 否 | `png` | 输出图片格式 (`png`, `jpeg`, `webp`) |
@@ -129,7 +135,7 @@ tapsvc-aigc image edit --model gpt-image-1.5 --image input.png --prompt-file edi
 | `--prompt, -p` | 是* | — | 编辑提示词 |
 | `--prompt-file` | 否 | — | 从文件读取提示词，可与 `--prompt` 同时使用（file 内容在前拼接） |
 | `--mask` | 否 | — | 编辑区域蒙版（PNG，< 4MB，透明区域为编辑区域；仅 gpt-image-1.5 支持，Gemini 不支持。CLI 仅校验格式和大小，不在本地校验是否与输入图片同尺寸） |
-| `--size` | 否 | `1024x1024` | 输出图片尺寸 |
+| `--size` | 否 | `auto` | 输出图片尺寸（`auto` 时不发送字段；**gpt-image-2 仅接受 `auto`**） |
 | `--n` | 否 | `1` | 生成数量 (1-10) |
 | `--response-format` | 否 | `png` | 输出图片格式 (`png`, `jpeg`, `webp`) |
 | `--output, -o` | 否 | 当前目录自动命名 | 输出文件路径 |
