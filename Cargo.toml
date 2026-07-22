@@ -5,6 +5,7 @@ members = [
     "crates/tapsvc-aigc-openai",
     "crates/tapsvc-aigc-ark",
     "crates/tapsvc-aigc-core",
+    "crates/tapsvc-aigc-dashscope",
 ]
 
 [workspace.package]
@@ -53,6 +54,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "allo
 tapsvc-aigc-core = { path = "crates/tapsvc-aigc-core" }
 tapsvc-aigc-openai = { path = "crates/tapsvc-aigc-openai" }
 tapsvc-aigc-ark = { path = "crates/tapsvc-aigc-ark" }
+tapsvc-aigc-dashscope = { path = "crates/tapsvc-aigc-dashscope" }
 
 [profile.release]
 lto = true

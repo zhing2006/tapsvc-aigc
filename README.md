@@ -2,15 +2,34 @@
 
 # tapsvc-aigc
 
-AIGC content generation Agent Skill. Generates images, audio speech, and videos via the `tapsvc-aigc` CLI.
+AIGC content generation skill. Generates images, audio speech, and videos via the `tapsvc-aigc` CLI.
 
 ## Supported Capabilities
 
-- **Image generation & editing** — gpt-image-2 (default), gpt-image-1.5, gemini-3-pro-image-preview, gemini-3.1-flash-image-preview
+- **Image generation & editing** — gpt-image-2 (default), gpt-image-1.5, gemini-3-pro-image, gemini-3.1-flash-image (`-preview` aliases remain compatible)
 - **Audio speech synthesis** — elevenlabs/eleven_v3, elevenlabs/eleven_multilingual_v2
-- **Video generation** — doubao-seedance-2-0-fast-260128, doubao-seedance-2-0-260128
+- **Video generation & editing** — doubao-seedance-2-0-fast-260128, doubao-seedance-2-0-260128, happyhorse-1.1-t2v, happyhorse-1.1-i2v, happyhorse-1.1-r2v, happyhorse-1.0-video-edit
 
-## Install / Update (for Agents)
+The gateway exposes several protocols. Images and speech use OpenAI-compatible
+endpoints; Seedance uses the Volcengine passthrough; HappyHorse uses the
+DashScope passthrough. `/v1/models` is a flat catalog and does not imply that
+every listed model works on every endpoint.
+
+Discover the live model catalog:
+
+```bash
+curl -s -H "Authorization: Bearer $TAPSVC_API_KEY" \
+  "${TAPSVC_BASE_URL:-https://llm-proxy.tapsvc.com}/v1/models" \
+  | jq -r '.data[].id'
+```
+
+Video highlights:
+
+- Seedance full supports 480p, 720p, 1080p, and 4k; the fast model supports 480p/720p.
+- HappyHorse supports focused text-to-video, first-frame animation, reference-image video, and existing-video editing workflows at 720p/1080p.
+- HappyHorse tasks can be checked with `tapsvc-aigc video get <task-id> --provider happyhorse`.
+
+## Install / Update
 
 Follow the steps below to install or update the tapsvc-aigc skill package.
 
@@ -104,6 +123,14 @@ The CLI requires two environment variables for API access:
 - `TAPSVC_API_KEY` — API key
 
 Set them via a `.env` file in your working directory or as environment variables. The CLI loads `.env` from the current working directory at startup.
+
+## Release Process
+
+Push a `v*` tag to trigger the GitHub Release workflow. It builds locked,
+statically distributable binaries for five targets, smoke-tests runnable
+artifacts, verifies static VCRuntime on Windows, packages `SKILL.md`, its
+references, and the platform binary, then publishes all archives to a GitHub
+Release with generated notes.
 
 ## License
 

@@ -1,6 +1,6 @@
 [package]
 name = "tapsvc-aigc"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 license.workspace = true
 
@@ -8,6 +8,7 @@ license.workspace = true
 tapsvc-aigc-core.workspace = true
 tapsvc-aigc-openai.workspace = true
 tapsvc-aigc-ark.workspace = true
+tapsvc-aigc-dashscope.workspace = true
 tokio.workspace = true
 reqwest.workspace = true
 serde.workspace = true

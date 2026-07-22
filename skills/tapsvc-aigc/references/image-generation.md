@@ -2,14 +2,32 @@
 
 ## Models
 
-| Feature | gpt-image-2 (DEFAULT) | gpt-image-1.5 | gemini-3-pro-image-preview | gemini-3.1-flash-image-preview |
-|---------|----------------------|---------------|---------------------------|-------------------------------|
+| Feature | gpt-image-2 (DEFAULT) | gpt-image-1.5 | gemini-3-pro-image | gemini-3.1-flash-image |
+|---------|----------------------|---------------|--------------------|------------------------|
 | Count | n=1 only | n=1 only | n=1 only | n=1 only |
 | size | `auto` only (router decides; bias via prompt) | `1024x1024`, `1536x1024`, `1024x1536`, `auto` | mapped to aspectRatio | mapped to aspectRatio |
 | quality | `auto`, `high`, `medium`, `low` | `auto`, `high`, `medium`, `low` | not supported | not supported |
 | background | `auto` / `opaque` only — `transparent` rejected, describe in prompt | `transparent`, `opaque`, `auto` | not supported | not supported |
 | mask edit | not supported | supported (PNG, < 4MB) | not supported | not supported |
 | text rendering | strongest, multilingual | strong | moderate | moderate |
+
+Stable Gemini model IDs are `gemini-3-pro-image` and
+`gemini-3.1-flash-image`. The gateway may retain the corresponding `-preview`
+IDs for compatibility; prefer stable IDs for new work. Use Flash for general,
+fast generation and Pro for complex, polished assets that need stronger
+instruction following.
+
+## Protocol Boundary
+
+This CLI calls the OpenAI-compatible `/v1/images/generations` and
+`/v1/images/edits` endpoints. `GET /v1/models` is a flat catalog, so model
+presence alone does not prove image-endpoint compatibility.
+
+Gemini's native API supports additional features such as Google Search
+grounding, thinking controls, multi-turn image refinement, and richer
+multi-reference inputs. They are not exposed by this CLI's OpenAI-shaped image
+commands. Use the Gemini-native `/v1beta/models/{model}:generateContent` route
+when a task explicitly requires them.
 
 > **Important**: All models support `n=1` only (litellm proxy limitation).
 > For multiple images, execute the command multiple times with different prompts or params.
@@ -75,6 +93,12 @@ Organize prompts in this order:
 2. **Subject** — detailed description of the main object
 3. **Key details** — materials, textures, colors
 4. **Constraints** — style, exclusions
+
+For Gemini, make the brief concrete and purpose-led: say what the image is for,
+describe the composition in layers or steps, use positive constraints, add
+camera and lighting language, then refine one change at a time. Prefer
+"an empty street" to "no cars" and "place the headline in the upper third" to
+vague aesthetic instructions.
 
 Example:
 

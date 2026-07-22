@@ -2,11 +2,13 @@
 
 ## 1. 项目概述
 
-tapsvc-aigc 是一个 Rust CLI 工具，通过 OpenAI 兼容代理调用多种 AIGC 能力：
+tapsvc-aigc 是一个 Rust CLI 工具，通过 TapSvc AI Gateway 的兼容协议和供应商透传协议调用多种 AIGC 能力：
 
 - **图片生成** — 通过 `/v1/images/generations` 端点
 - **语音合成 (TTS)** — 通过 `/v1/audio/speech` 端点
-- **视频生成** — 通过 Volcengine ARK API (Seedance 2.0)
+- **视频生成与编辑** — 通过 Volcengine ARK API (Seedance 2.0) 和 DashScope API (HappyHorse)
+
+`/v1/models` 返回跨协议扁平目录，模型出现在目录中不表示它支持所有端点；调用时必须按能力选择协议。
 
 ## 2. 支持的模型
 
@@ -16,8 +18,10 @@ tapsvc-aigc 是一个 Rust CLI 工具，通过 OpenAI 兼容代理调用多种 A
 |------|--------|------|
 | `gpt-image-2` | OpenAI | 新一代图片生成模型（默认）— 文本渲染、多语种、色彩中性度更好；仅接受 `size=auto`，不支持 `background=transparent` |
 | `gpt-image-1.5` | OpenAI | 上一代旗舰；需要参数级 `background=transparent` 或固定尺寸时使用 |
-| `gemini-3-pro-image-preview` | Google | Gemini 3 Pro 图片生成 |
-| `gemini-3.1-flash-image-preview` | Google | Gemini 3.1 Flash 图片生成 |
+| `gemini-3-pro-image` | Google | Gemini 3 Pro 图片生成（复杂专业资产） |
+| `gemini-3.1-flash-image` | Google | Gemini 3.1 Flash 图片生成（通用默认） |
+
+`gemini-3-pro-image-preview` 和 `gemini-3.1-flash-image-preview` 仍作为兼容别名。Gemini 原生 API 的搜索、thinking、多轮编辑和丰富多参考图能力不由当前 OpenAI 风格图片 CLI 暴露。
 
 > **gpt-image-2 限制：**
 > - **`size` 仅接受 `auto`** — 路由层自动选择尺寸，显式 `WxH` 会被代理拒绝；通过 prompt 措辞（"square composition" / "portrait" / "wide landscape 16:9"）引导比例
@@ -53,12 +57,19 @@ tapsvc-aigc 是一个 Rust CLI 工具，通过 OpenAI 兼容代理调用多种 A
 >
 > **输出格式映射：** LiteLLM 自动将 OpenAI 格式名转换为 ElevenLabs 原生格式（`mp3` → `mp3_44100_128`、`pcm` → `pcm_44100`、`opus` → `opus_48000_128`）。`aac`、`flac`、`wav` 的支持取决于 LiteLLM 版本。
 
-### 2.3 视频生成 (Volcengine ARK)
+### 2.3 视频生成与编辑（Volcengine ARK / DashScope）
 
 视频生成走 Volcengine ARK 原生 API（非 OpenAI 兼容端点），通过 `-m` 参数直接传入 API model ID：
 
 - `doubao-seedance-2-0-260128` — 标准版，质量最优
 - `doubao-seedance-2-0-fast-260128` — 快速版，速度优先
+
+HappyHorse 走 DashScope 原生异步 API：
+
+- `happyhorse-1.1-t2v` — 文生视频
+- `happyhorse-1.1-i2v` — 首帧图生视频
+- `happyhorse-1.1-r2v` — 1-9 张参考图生成视频
+- `happyhorse-1.0-video-edit` — 编辑一个公网视频，可带 0-5 张参考图
 
 ## 3. CLI 命令设计
 
@@ -74,7 +85,7 @@ tapsvc-aigc [全局选项] <子命令> [参数]
 | — | `TAPSVC_API_KEY` | API Key（所有 API 共用） |
 | `--output, -o <PATH>` | — | 输出文件路径 |
 
-> `TAPSVC_BASE_URL` 和 `TAPSVC_API_KEY` 通过环境变量或 `.env` 文件配置，三个 API（image、audio、video）共享同一配置。程序为单文件分发，无配置文件，默认值硬编码在代码中。
+> `TAPSVC_BASE_URL` 和 `TAPSVC_API_KEY` 通过环境变量或 `.env` 文件配置，所有协议客户端共享同一配置。程序为单文件分发，无额外配置文件。
 
 ### 3.2 图片生成
 
@@ -84,14 +95,14 @@ tapsvc-aigc image generate --model gpt-image-1.5 --prompt "a cat in space" -o ca
 
 # 指定尺寸和数量
 tapsvc-aigc image generate \
-  --model gemini-3-pro-image-preview \
+  --model gemini-3-pro-image \
   --prompt "a cyberpunk city" \
   --size 1024x1024 \
   --n 2 \
   -o city.png
 
 # 从文件读取 prompt
-tapsvc-aigc image generate --model gemini-3.1-flash-image-preview --prompt-file prompt.txt -o result.png
+tapsvc-aigc image generate --model gemini-3.1-flash-image --prompt-file prompt.txt -o result.png
 ```
 
 **子命令参数：**
@@ -230,9 +241,9 @@ tapsvc-aigc video generate \
 | `--ref-image` | 否 | — | 参考图片（可重复，最多 9 张，与 `--first-frame` 互斥） |
 | `--ref-video` | 否 | — | 参考视频 URL（可重复，最多 3 个，仅支持 URL，与 `--first-frame` 互斥） |
 | `--ref-audio` | 否 | — | 参考音频（可重复，最多 3 个，需搭配 `--ref-image` 或 `--ref-video`） |
-| `--resolution` | 否 | `720p` | 分辨率（`480p`、`720p`） |
+| `--resolution` | 否 | `720p` | 分辨率（按模型支持 `480p`、`720p`、`1080p`、`4k`） |
 | `--aspect-ratio` | 否 | `adaptive` | 宽高比（`16:9`、`4:3`、`1:1`、`3:4`、`9:16`、`21:9`、`adaptive`） |
-| `--duration` | 否 | `5` | 视频时长，4-15 秒或 -1 自动 |
+| `--duration` | 否 | `5` | Seedance 为 4-15 秒或 -1 自动；HappyHorse 生成模型为 3-15 秒；video-edit 不支持 |
 | `--no-audio` | 否 | `false` | 禁用音频生成（默认生成音频） |
 | `--watermark` | 否 | `false` | 添加水印 |
 | `--web-search` | 否 | `false` | 启用网络搜索增强 |
@@ -241,6 +252,10 @@ tapsvc-aigc video generate \
 | `--poll-interval` | 否 | `10` | 轮询间隔（秒） |
 | `--timeout` | 否 | `300` | 超时时间（秒） |
 | `--output, -o` | 否 | `video_{timestamp}.mp4` | 输出文件路径 |
+
+Seedance 完整版还支持 1080p/4k，fast 版仅支持 480p/720p。HappyHorse 支持
+720p/1080p，其中 t2v/i2v/r2v 时长为 3-15 秒；video-edit 不接受时长参数。
+HappyHorse 任务通过 `video get <task-id> --provider happyhorse` 查询。
 
 > *`--prompt`/`--prompt-file` 至少需要与 `--first-frame`、`--ref-image`、`--ref-video` 中的一种共同提供，或单独提供 prompt 进行文生视频。
 
@@ -470,9 +485,20 @@ Authorization: Bearer {api_key}
 5. 超过 `--timeout` 则输出 task_id 供稍后查询
 6. 注意：`video_url` 24 小时内有效
 
+### 4.5 HappyHorse 视频 — DashScope API
+
+四个模型共用异步接口：创建任务为
+`POST {base_url}/dashscope/api/v1/services/aigc/video-generation/video-synthesis`，
+查询任务为 `GET {base_url}/dashscope/api/v1/tasks/{task_id}`。创建请求必须携带
+`X-DashScope-Async: enable`。
+
+媒体 `type` 按模型分别使用 `first_frame`、`reference_image` 和 `video`。任务状态为
+`PENDING` → `RUNNING` → `SUCCEEDED` / `FAILED` / `CANCELED`；任务 ID 与结果下载链接
+均只保留 24 小时。
+
 ## 5. Workspace 与 Crate 结构
 
-项目采用 Cargo workspace，拆分为 4 个 crate，Rust edition 统一使用 **2024**。
+项目采用 Cargo workspace，拆分为 5 个 crate，Rust edition 统一使用 **2024**。
 
 ### 5.1 Workspace 布局
 
@@ -508,13 +534,20 @@ tapsvc-aigc/
 │   │       ├── image.rs          # /v1/images/generations 请求/响应类型 + 调用
 │   │       └── audio.rs          # /v1/audio/speech 请求/响应类型 + 调用
 │   │
-│   └── tapsvc-aigc-ark/          # Volcengine ARK 客户端 library crate
+│   ├── tapsvc-aigc-ark/          # Volcengine ARK 客户端 library crate
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs            # 公开 API
+│   │       ├── client.rs         # ARK HTTP 客户端（base_url + api_key）
+│   │       ├── error.rs          # 错误类型定义
+│   │       └── video.rs          # 视频生成：提交任务、轮询、类型定义
+│   └── tapsvc-aigc-dashscope/    # DashScope 客户端 library crate
 │       ├── Cargo.toml
 │       └── src/
-│           ├── lib.rs            # 公开 API
-│           ├── client.rs         # ARK HTTP 客户端（base_url + api_key）
-│           ├── error.rs          # 错误类型定义
-│           └── video.rs          # 视频生成：提交任务、轮询、类型定义
+│           ├── lib.rs
+│           ├── client.rs
+│           ├── error.rs
+│           └── video.rs          # HappyHorse 异步任务类型与调用
 │
 ├── LICENSE
 └── README.md
@@ -530,6 +563,7 @@ members = [
     "crates/tapsvc-aigc-core",
     "crates/tapsvc-aigc-openai",
     "crates/tapsvc-aigc-ark",
+    "crates/tapsvc-aigc-dashscope",
 ]
 
 [workspace.package]
@@ -542,7 +576,7 @@ repository = "https://github.com/zhing2006/tapsvc-aigc"
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "time", "fs", "signal"] }
 
 # HTTP 客户端
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream", "multipart"] }
 
 # 序列化
 serde = { version = "1", default-features = false, features = ["derive"] }
@@ -565,6 +599,8 @@ base64 = { version = "0.22", default-features = false }
 # workspace 内部 crate
 tapsvc-aigc-openai = { path = "crates/tapsvc-aigc-openai" }
 tapsvc-aigc-ark = { path = "crates/tapsvc-aigc-ark" }
+tapsvc-aigc-dashscope = { path = "crates/tapsvc-aigc-dashscope" }
+tapsvc-aigc-core = { path = "crates/tapsvc-aigc-core" }
 ```
 
 ### 5.3 各 Crate 依赖
@@ -574,13 +610,15 @@ tapsvc-aigc-ark = { path = "crates/tapsvc-aigc-ark" }
 ```toml
 [package]
 name = "tapsvc-aigc"
-version = "0.1.0"
+version = "0.1.2"
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
+tapsvc-aigc-core.workspace = true
 tapsvc-aigc-openai.workspace = true
 tapsvc-aigc-ark.workspace = true
+tapsvc-aigc-dashscope.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -598,11 +636,12 @@ base64.workspace = true
 ```toml
 [package]
 name = "tapsvc-aigc-openai"
-version = "0.1.0"
+version = "0.1.2"
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
+tapsvc-aigc-core.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -616,11 +655,12 @@ tokio = { workspace = true, features = ["time"] }
 ```toml
 [package]
 name = "tapsvc-aigc-ark"
-version = "0.1.0"
+version = "0.1.2"
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
+tapsvc-aigc-core.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -628,6 +668,10 @@ thiserror.workspace = true
 tracing.workspace = true
 tokio = { workspace = true, features = ["time"] }
 ```
+
+**`tapsvc-aigc-dashscope`**（DashScope 客户端）依赖
+`tapsvc-aigc-core`、`reqwest`、`serde`、`serde_json` 和 `thiserror`，负责
+HappyHorse 异步视频任务。
 
 ### 5.4 Crate 职责划分
 
@@ -637,8 +681,9 @@ tokio = { workspace = true, features = ["time"] }
 | `tapsvc-aigc-core` | library | 共享基础层：通用 retry 执行器（指数退避 + jitter + Retry-After） |
 | `tapsvc-aigc-openai` | library | OpenAI 兼容 API 的类型定义和 HTTP 调用（images + audio） |
 | `tapsvc-aigc-ark` | library | Volcengine ARK API 的类型定义和 HTTP 调用（video） |
+| `tapsvc-aigc-dashscope` | library | DashScope API 的类型定义和 HTTP 调用（HappyHorse video） |
 
-> **设计原则**：两个 library crate 不依赖 CLI 相关 crate（clap、indicatif 等），
+> **设计原则**：API library crate 不依赖 CLI 相关 crate（clap、indicatif 等），
 > 保持纯粹的 API 客户端职责，可被其他项目复用。
 
 ## 6. 错误处理
@@ -650,12 +695,10 @@ tokio = { workspace = true, features = ["time"] }
 | API 返回 429 (限流) | 自动重试，优先使用 `Retry-After` header 的延迟值 |
 | API 返回 500/502/503/504 | 自动重试，同网络错误退避策略 |
 | 视频生成超时 | 输出 task_id，告知用户可稍后手动查询 |
-| 输出文件已存在 | 默认覆盖，可加 `--no-overwrite` 选项 |
+| 输出文件已存在 | 默认覆盖 |
 | 视频 URL 过期 | 提示 24 小时有效期限制 |
 
 ## 7. 输出行为
 
 - 默认将进度信息输出到 stderr（不干扰 stdout 重定向）
 - 生成成功后在 stdout 打印输出文件路径
-- `--quiet` 选项抑制进度信息
-- `--verbose` 选项输出详细请求/响应日志

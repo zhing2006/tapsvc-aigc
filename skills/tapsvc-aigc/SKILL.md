@@ -1,11 +1,9 @@
 ---
 name: tapsvc-aigc
 description: >
-  AIGC content generation skill. Generates images, audio speech, and videos
-  using tapsvc-aigc CLI. Use when the user asks to generate, create, or edit
-  images, synthesize speech or audio, or create videos. Handles prompt
-  optimization, model selection, parameter validation, and result delivery.
-allowed-tools: Bash Read Write
+  Generate and edit images, synthesize speech, and create or edit videos through
+  the TapSvc AI Gateway with the tapsvc-aigc CLI. Use when a user requests AIGC
+  media, prompt optimization, model selection, or generation parameter guidance.
 ---
 
 # tapsvc-aigc AIGC Skill
@@ -17,7 +15,7 @@ practices.
 
 ## Workflow
 
-Execute **every step in order**. Do NOT skip any step.
+Execute every step in order.
 
 ### Step 0 — Preflight
 
@@ -29,6 +27,10 @@ Execute **every step in order**. Do NOT skip any step.
 2. If no `.env` file exists in the working directory, check that `TAPSVC_BASE_URL`
    and `TAPSVC_API_KEY` are set. If `.env` exists, skip this check — the CLI
    loads it automatically at startup.
+3. When checking current model availability, call `GET /v1/models`. Treat the
+   result as a flat cross-protocol catalog: a listed model is not evidence that
+   it works on every endpoint. Match the requested modality to the protocol in
+   the corresponding reference.
 
 If the binary is not found, or env vars are missing without a `.env`, **stop**
 and tell the user what is missing.

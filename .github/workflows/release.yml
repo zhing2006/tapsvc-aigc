@@ -57,28 +57,53 @@ jobs:
 
       - name: Install cross (Linux arm64)
         if: matrix.target == 'aarch64-unknown-linux-musl'
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        run: cargo install cross --version 0.2.5 --locked
 
       - name: Build (cross)
         if: matrix.target == 'aarch64-unknown-linux-musl'
-        run: cross build --release --target ${{ matrix.target }}
+        run: cross build --release --locked --target ${{ matrix.target }}
 
       - name: Build (macOS)
         if: startsWith(matrix.target, 'x86_64-apple') || startsWith(matrix.target, 'aarch64-apple')
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
         env:
-          RUSTFLAGS: "-C target-feature=+crt-static"
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
 
       - name: Build (Windows / Linux x64)
         if: matrix.target == 'x86_64-pc-windows-msvc' || matrix.target == 'x86_64-unknown-linux-musl'
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Verify static VCRuntime
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        shell: pwsh
+        run: |
+          $exe = "target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsRoot = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vsRoot) { throw "vswhere could not locate a VS install with VC tools" }
+          $dumpbin = Get-ChildItem -Path "$vsRoot\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe -ErrorAction Stop |
+            Where-Object { $_.FullName -match 'Hostx64\\x64\\dumpbin\.exe$' } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $dumpbin) { throw "dumpbin.exe not found under $vsRoot" }
+          $imports = & $dumpbin /imports $exe 2>&1 | Out-String
+          $bad = "vcruntime140.dll", "msvcr"
+          $hits = $bad | Where-Object { $imports -match [regex]::Escape($_) }
+          if ($hits) {
+            Write-Error "Dynamic VCRuntime imports found: $($hits -join ', ')"
+            exit 1
+          }
+
+      - name: Smoke test (--help)
+        if: matrix.target != 'aarch64-unknown-linux-musl' && matrix.target != 'aarch64-apple-darwin'
+        shell: bash
+        run: ./target/${{ matrix.target }}/release/${{ matrix.binary }} --help
 
       - name: Package skill (Unix)
         if: runner.os != 'Windows'
         run: |
           mkdir -p tapsvc-aigc/scripts
-          cp -r skills/tapsvc-aigc/SKILL.md tapsvc-aigc/
-          cp -r skills/tapsvc-aigc/references tapsvc-aigc/
+          cp skills/tapsvc-aigc/SKILL.md tapsvc-aigc/
+          cp -R skills/tapsvc-aigc/references tapsvc-aigc/
           cp target/${{ matrix.target }}/release/${{ matrix.binary }} tapsvc-aigc/scripts/
           chmod +x tapsvc-aigc/scripts/${{ matrix.binary }}
           tar czf ${{ matrix.asset }} tapsvc-aigc/
@@ -89,7 +114,7 @@ jobs:
         run: |
           mkdir -p tapsvc-aigc/scripts
           cp skills/tapsvc-aigc/SKILL.md tapsvc-aigc/
-          cp -r skills/tapsvc-aigc/references tapsvc-aigc/
+          cp -R skills/tapsvc-aigc/references tapsvc-aigc/
           cp target/${{ matrix.target }}/release/${{ matrix.binary }} tapsvc-aigc/scripts/
 
       - name: Create zip (Windows)

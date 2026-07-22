@@ -2,15 +2,33 @@
 
 # tapsvc-aigc
 
-AIGC 内容生成 Agent 技能。通过 `tapsvc-aigc` CLI 生成图片、语音和视频。
+AIGC 内容生成技能。通过 `tapsvc-aigc` CLI 生成图片、语音和视频。
 
 ## 支持的能力
 
-- **图片生成与编辑** — gpt-image-2（默认）、gpt-image-1.5、gemini-3-pro-image-preview、gemini-3.1-flash-image-preview
+- **图片生成与编辑** — gpt-image-2（默认）、gpt-image-1.5、gemini-3-pro-image、gemini-3.1-flash-image（兼容 `-preview` 别名）
 - **语音合成** — elevenlabs/eleven_v3、elevenlabs/eleven_multilingual_v2
-- **视频生成** — doubao-seedance-2-0-fast-260128、doubao-seedance-2-0-260128
+- **视频生成与编辑** — doubao-seedance-2-0-fast-260128、doubao-seedance-2-0-260128、happyhorse-1.1-t2v、happyhorse-1.1-i2v、happyhorse-1.1-r2v、happyhorse-1.0-video-edit
 
-## 安装 / 更新（面向 Agent）
+网关提供多种协议：图片和语音使用 OpenAI 兼容端点，Seedance 使用
+Volcengine 透传，HappyHorse 使用 DashScope 透传。`/v1/models` 返回的是跨协议
+扁平目录，模型出现在列表中并不表示它能在所有端点上使用。
+
+查询实时模型目录：
+
+```bash
+curl -s -H "Authorization: Bearer $TAPSVC_API_KEY" \
+  "${TAPSVC_BASE_URL:-https://llm-proxy.tapsvc.com}/v1/models" \
+  | jq -r '.data[].id'
+```
+
+视频能力重点：
+
+- Seedance 完整版支持 480p、720p、1080p、4k；fast 版支持 480p/720p。
+- HappyHorse 支持文生视频、首帧图生视频、多参考图生视频和已有视频编辑，分辨率为 720p/1080p。
+- 使用 `tapsvc-aigc video get <task-id> --provider happyhorse` 查询 HappyHorse 任务。
+
+## 安装 / 更新
 
 按照以下步骤安装或更新 tapsvc-aigc 技能包。
 
@@ -104,6 +122,12 @@ CLI 需要两个环境变量用于 API 访问：
 - `TAPSVC_API_KEY` — API 密钥
 
 通过工作目录下的 `.env` 文件或环境变量设置。CLI 在启动时自动从当前工作目录加载 `.env`。
+
+## Release 流程
+
+推送 `v*` 标签会触发 GitHub Release 工作流。工作流使用锁定依赖为五个平台构建可静态分发的二进制，
+对可运行产物执行冒烟测试，在 Windows 上验证 VCRuntime 静态链接，打包 `SKILL.md`、参考文档和
+对应平台二进制，最后创建带自动生成说明的 GitHub Release。
 
 ## 许可证
 

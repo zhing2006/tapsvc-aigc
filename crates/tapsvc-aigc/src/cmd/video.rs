@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{Context, bail};
@@ -10,8 +10,55 @@ use tapsvc_aigc_ark::video::{
     AudioUrlData, ContentItem, CreateVideoTaskRequest, ImageUrlData, ListVideoTasksFilter,
     VideoTask, VideoTaskTool, VideoUrlData,
 };
+use tapsvc_aigc_dashscope::DashScopeClient;
+use tapsvc_aigc_dashscope::video::{
+    CreateVideoTaskRequest as DashScopeCreateVideoTaskRequest, MediaItem,
+    VideoInput as DashScopeVideoInput, VideoParameters as DashScopeVideoParameters,
+    VideoTask as DashScopeVideoTask,
+};
 
 use crate::cli::VideoCommand;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HappyHorseMode {
+    TextToVideo,
+    ImageToVideo,
+    ReferenceToVideo,
+    VideoEdit,
+}
+
+impl HappyHorseMode {
+    fn from_model(model: &str) -> Option<Self> {
+        match model {
+            "happyhorse-1.1-t2v" => Some(Self::TextToVideo),
+            "happyhorse-1.1-i2v" => Some(Self::ImageToVideo),
+            "happyhorse-1.1-r2v" => Some(Self::ReferenceToVideo),
+            "happyhorse-1.0-video-edit" => Some(Self::VideoEdit),
+            _ => None,
+        }
+    }
+
+    fn supports_ratio(self) -> bool {
+        matches!(self, Self::TextToVideo | Self::ReferenceToVideo)
+    }
+}
+
+struct HappyHorseGenerateOptions {
+    mode: HappyHorseMode,
+    model: String,
+    prompt: Option<String>,
+    first_frame: Option<String>,
+    ref_image: Vec<String>,
+    ref_video: Vec<String>,
+    resolution: String,
+    aspect_ratio: String,
+    duration: i32,
+    watermark: bool,
+    seed: Option<u64>,
+    poll_interval: u64,
+    timeout: u64,
+    output: Option<String>,
+}
 
 pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
     match command {
@@ -83,9 +130,17 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
                 );
             }
 
-            if duration != -1 && !(4..=15).contains(&duration) {
-                bail!("--duration must be 4-15 seconds, or -1 for auto");
+            let happyhorse_mode = HappyHorseMode::from_model(&model);
+            if happyhorse_mode.is_none() && model.starts_with("happyhorse-") {
+                bail!("unsupported HappyHorse model: {model}");
             }
+            if happyhorse_mode == Some(HappyHorseMode::VideoEdit) && duration.is_some() {
+                bail!("happyhorse-1.0-video-edit does not support --duration");
+            }
+            let duration = duration.unwrap_or(5);
+            validate_duration(happyhorse_mode, duration)?;
+            validate_resolution(&model, happyhorse_mode, &resolution)?;
+            validate_aspect_ratio(happyhorse_mode, &aspect_ratio)?;
 
             for url in &ref_video {
                 if !url.starts_with("http://") && !url.starts_with("https://") {
@@ -93,12 +148,47 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
                 }
             }
 
+            let final_prompt = resolve_prompt(prompt.as_deref(), prompt_file.as_deref()).await?;
+
+            if let Some(mode) = happyhorse_mode {
+                validate_happyhorse_inputs(
+                    mode,
+                    final_prompt.as_deref(),
+                    first_frame.as_deref(),
+                    last_frame.as_deref(),
+                    &ref_image,
+                    &ref_video,
+                    &ref_audio,
+                    no_audio,
+                    camera_fixed,
+                    web_search,
+                    seed,
+                )?;
+
+                return generate_happyhorse(HappyHorseGenerateOptions {
+                    mode,
+                    model,
+                    prompt: final_prompt,
+                    first_frame,
+                    ref_image,
+                    ref_video,
+                    resolution,
+                    aspect_ratio,
+                    duration,
+                    watermark,
+                    seed,
+                    poll_interval,
+                    timeout,
+                    output,
+                })
+                .await;
+            }
+
             // ── Build content items ──
 
             let mut content: Vec<ContentItem> = Vec::new();
 
             // Prompt
-            let final_prompt = resolve_prompt(prompt.as_deref(), prompt_file.as_deref()).await?;
             if let Some(text) = final_prompt {
                 content.push(ContentItem::Text { text });
             }
@@ -209,40 +299,7 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
                             .and_then(|c| c.video_url.as_deref())
                             .context("no video URL in task result")?;
 
-                        // Download video
-                        let output_path = match output {
-                            Some(p) => std::path::PathBuf::from(p),
-                            None => {
-                                let ts = Local::now().format("%Y%m%d_%H%M%S");
-                                std::path::PathBuf::from(format!("video_{ts}.mp4"))
-                            }
-                        };
-
-                        eprintln!("Downloading video...");
-                        let resp = reqwest::get(video_url)
-                            .await
-                            .context("failed to download video")?;
-
-                        if !resp.status().is_success() {
-                            bail!("failed to download video: HTTP {}", resp.status());
-                        }
-
-                        let bytes = resp.bytes().await.context("failed to read video data")?;
-
-                        if let Some(parent) = output_path.parent()
-                            && !parent.as_os_str().is_empty()
-                        {
-                            tokio::fs::create_dir_all(parent).await.with_context(|| {
-                                format!("failed to create directory {}", parent.display())
-                            })?;
-                        }
-
-                        tokio::fs::write(&output_path, &bytes)
-                            .await
-                            .with_context(|| {
-                                format!("failed to write {}", output_path.display())
-                            })?;
-
+                        let output_path = download_video(video_url, output.as_deref()).await?;
                         println!("{}", output_path.display());
                         break;
                     }
@@ -266,14 +323,20 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
             Ok(())
         }
 
-        VideoCommand::Get { task_id } => {
+        VideoCommand::Get { task_id, provider } => {
             let base_url =
                 std::env::var("TAPSVC_BASE_URL").context("TAPSVC_BASE_URL is not set")?;
             let api_key = std::env::var("TAPSVC_API_KEY").context("TAPSVC_API_KEY is not set")?;
-            let client = ArkClient::new(base_url, api_key);
 
-            let task = client.get_video_task(&task_id).await?;
-            print_task(&task);
+            if provider == "happyhorse" {
+                let client = DashScopeClient::new(base_url, api_key);
+                let response = client.get_video_task(&task_id).await?;
+                print_happyhorse_task(&response.output);
+            } else {
+                let client = ArkClient::new(base_url, api_key);
+                let task = client.get_video_task(&task_id).await?;
+                print_task(&task);
+            }
 
             Ok(())
         }
@@ -327,6 +390,316 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
 }
 
 // ── Helpers ──
+
+fn validate_duration(mode: Option<HappyHorseMode>, duration: i32) -> anyhow::Result<()> {
+    match mode {
+        Some(HappyHorseMode::VideoEdit) => {}
+        Some(_) => {
+            if !(3..=15).contains(&duration) {
+                bail!("HappyHorse duration must be between 3 and 15 seconds");
+            }
+        }
+        None if duration != -1 && !(4..=15).contains(&duration) => {
+            bail!("Seedance duration must be between 4 and 15 seconds, or -1 for auto");
+        }
+        None => {}
+    }
+
+    Ok(())
+}
+
+fn validate_resolution(
+    model: &str,
+    mode: Option<HappyHorseMode>,
+    resolution: &str,
+) -> anyhow::Result<()> {
+    if mode.is_some() {
+        if !matches!(resolution, "720p" | "1080p") {
+            bail!("HappyHorse only supports 720p and 1080p");
+        }
+    } else if model == "doubao-seedance-2-0-fast-260128" && !matches!(resolution, "480p" | "720p") {
+        bail!(
+            "model {model} only supports 480p and 720p; use doubao-seedance-2-0-260128 for {resolution}"
+        );
+    }
+
+    Ok(())
+}
+
+fn validate_aspect_ratio(mode: Option<HappyHorseMode>, aspect_ratio: &str) -> anyhow::Result<()> {
+    const SEEDANCE_RATIOS: &[&str] = &["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"];
+    const HAPPYHORSE_RATIOS: &[&str] = &[
+        "16:9", "9:16", "1:1", "4:3", "3:4", "4:5", "5:4", "9:21", "21:9", "adaptive",
+    ];
+
+    match mode {
+        Some(mode) if mode.supports_ratio() => {
+            if !HAPPYHORSE_RATIOS.contains(&aspect_ratio) {
+                bail!("unsupported HappyHorse aspect ratio: {aspect_ratio}");
+            }
+        }
+        Some(_) if aspect_ratio != "adaptive" => {
+            bail!("--aspect-ratio is not supported by this HappyHorse model");
+        }
+        Some(_) => {}
+        None if !SEEDANCE_RATIOS.contains(&aspect_ratio) => {
+            bail!("unsupported Seedance aspect ratio: {aspect_ratio}");
+        }
+        None => {}
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_happyhorse_inputs(
+    mode: HappyHorseMode,
+    prompt: Option<&str>,
+    first_frame: Option<&str>,
+    last_frame: Option<&str>,
+    ref_image: &[String],
+    ref_video: &[String],
+    ref_audio: &[String],
+    no_audio: bool,
+    camera_fixed: bool,
+    web_search: bool,
+    seed: Option<u64>,
+) -> anyhow::Result<()> {
+    let has_prompt = prompt.is_some_and(|value| !value.trim().is_empty());
+
+    match mode {
+        HappyHorseMode::TextToVideo => {
+            if !has_prompt {
+                bail!("happyhorse-1.1-t2v requires --prompt or --prompt-file");
+            }
+            if first_frame.is_some() || !ref_image.is_empty() || !ref_video.is_empty() {
+                bail!("happyhorse-1.1-t2v only accepts a text prompt");
+            }
+        }
+        HappyHorseMode::ImageToVideo => {
+            if first_frame.is_none() {
+                bail!("happyhorse-1.1-i2v requires exactly one --first-frame");
+            }
+            if !ref_image.is_empty() || !ref_video.is_empty() {
+                bail!("happyhorse-1.1-i2v does not accept reference media");
+            }
+        }
+        HappyHorseMode::ReferenceToVideo => {
+            if !has_prompt {
+                bail!("happyhorse-1.1-r2v requires --prompt or --prompt-file");
+            }
+            if ref_image.is_empty() {
+                bail!("happyhorse-1.1-r2v requires 1 to 9 --ref-image values");
+            }
+            if first_frame.is_some() || !ref_video.is_empty() {
+                bail!("happyhorse-1.1-r2v only accepts reference images");
+            }
+        }
+        HappyHorseMode::VideoEdit => {
+            if !has_prompt {
+                bail!("happyhorse-1.0-video-edit requires --prompt or --prompt-file");
+            }
+            if ref_video.len() != 1 {
+                bail!("happyhorse-1.0-video-edit requires exactly one --ref-video URL");
+            }
+            if ref_image.len() > 5 {
+                bail!("happyhorse-1.0-video-edit supports at most 5 --ref-image values");
+            }
+            if first_frame.is_some() {
+                bail!("happyhorse-1.0-video-edit does not accept --first-frame");
+            }
+        }
+    }
+
+    if last_frame.is_some() {
+        bail!("HappyHorse models do not support --last-frame");
+    }
+    if !ref_audio.is_empty() {
+        bail!("HappyHorse models do not support --ref-audio");
+    }
+    if no_audio {
+        bail!("HappyHorse models do not support --no-audio");
+    }
+    if camera_fixed {
+        bail!("HappyHorse models do not support --camera-fixed");
+    }
+    if web_search {
+        bail!("HappyHorse models do not support --web-search");
+    }
+    if seed.is_some_and(|value| value > 2_147_483_647) {
+        bail!("HappyHorse seed must be between 0 and 2147483647");
+    }
+
+    Ok(())
+}
+
+async fn generate_happyhorse(options: HappyHorseGenerateOptions) -> anyhow::Result<()> {
+    let HappyHorseGenerateOptions {
+        mode,
+        model,
+        prompt,
+        first_frame,
+        ref_image,
+        ref_video,
+        resolution,
+        aspect_ratio,
+        duration,
+        watermark,
+        seed,
+        poll_interval,
+        timeout,
+        output,
+    } = options;
+
+    let mut media = Vec::new();
+    match mode {
+        HappyHorseMode::TextToVideo => {}
+        HappyHorseMode::ImageToVideo => {
+            let frame = first_frame.context("missing first frame after validation")?;
+            media.push(MediaItem {
+                type_: "first_frame".to_string(),
+                url: resolve_image_url(&frame).await?,
+            });
+        }
+        HappyHorseMode::ReferenceToVideo => {
+            for image in ref_image {
+                media.push(MediaItem {
+                    type_: "reference_image".to_string(),
+                    url: resolve_image_url(&image).await?,
+                });
+            }
+        }
+        HappyHorseMode::VideoEdit => {
+            let video = ref_video
+                .into_iter()
+                .next()
+                .context("missing reference video after validation")?;
+            media.push(MediaItem {
+                type_: "video".to_string(),
+                url: video,
+            });
+            for image in ref_image {
+                media.push(MediaItem {
+                    type_: "reference_image".to_string(),
+                    url: resolve_image_url(&image).await?,
+                });
+            }
+        }
+    }
+
+    let ratio = mode.supports_ratio().then(|| {
+        if aspect_ratio == "adaptive" {
+            "16:9".to_string()
+        } else {
+            aspect_ratio
+        }
+    });
+    let request = DashScopeCreateVideoTaskRequest {
+        model,
+        input: DashScopeVideoInput { prompt, media },
+        parameters: DashScopeVideoParameters {
+            resolution: Some(resolution.to_ascii_uppercase()),
+            ratio,
+            duration: (mode != HappyHorseMode::VideoEdit).then_some(duration),
+            watermark: Some(watermark),
+            seed,
+        },
+    };
+
+    let base_url = std::env::var("TAPSVC_BASE_URL").context("TAPSVC_BASE_URL is not set")?;
+    let api_key = std::env::var("TAPSVC_API_KEY").context("TAPSVC_API_KEY is not set")?;
+    let client = DashScopeClient::new(base_url, api_key);
+
+    let created = client.create_video_task(&request).await?;
+    let task_id = created
+        .output
+        .task_id
+        .context("no task ID in HappyHorse create response")?;
+    eprintln!("Task created: {task_id}");
+
+    let deadline = Instant::now() + std::time::Duration::from_secs(timeout);
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            eprintln!("Timeout after {timeout}s. Task ID: {task_id}");
+            eprintln!(
+                "You can check status later with: tapsvc-aigc video get {task_id} --provider happyhorse"
+            );
+            bail!("video generation timed out after {timeout}s");
+        }
+
+        let sleep_duration = remaining.min(std::time::Duration::from_secs(poll_interval.max(1)));
+        tokio::time::sleep(sleep_duration).await;
+
+        let elapsed = (timeout as i64
+            - deadline.saturating_duration_since(Instant::now()).as_secs() as i64)
+            .max(0) as u64;
+        let response = client.get_video_task(&task_id).await?;
+        let task = response.output;
+
+        match task.task_status.to_ascii_uppercase().as_str() {
+            "SUCCEEDED" => {
+                eprintln!("Task succeeded! ({elapsed}s elapsed)");
+                let video_url = task
+                    .video_url
+                    .as_deref()
+                    .context("no video URL in HappyHorse task result")?;
+                let output_path = download_video(video_url, output.as_deref()).await?;
+                println!("{}", output_path.display());
+                return Ok(());
+            }
+            "FAILED" => {
+                let message = match (task.code, task.message) {
+                    (Some(code), Some(message)) => format!("{code}: {message}"),
+                    (Some(code), None) => code,
+                    (None, Some(message)) => message,
+                    (None, None) => "unknown error".to_string(),
+                };
+                bail!("video generation failed: {message}");
+            }
+            "CANCELED" | "CANCELLED" => {
+                bail!("video generation was cancelled (task: {task_id})");
+            }
+            status => {
+                if status == "UNKNOWN" {
+                    bail!("HappyHorse task is unknown or expired: {task_id}");
+                }
+                eprintln!("Status: {status}, waiting... ({elapsed}s elapsed)");
+            }
+        }
+    }
+}
+
+async fn download_video(url: &str, output: Option<&str>) -> anyhow::Result<PathBuf> {
+    let response = reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .context("failed to download generated video")?
+        .error_for_status()
+        .context("video download returned an error status")?;
+    let bytes = response
+        .bytes()
+        .await
+        .context("failed to read generated video")?;
+
+    let output_path = output.map(PathBuf::from).unwrap_or_else(|| {
+        let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+        PathBuf::from(format!("video_{timestamp}.mp4"))
+    });
+    if let Some(parent) = output_path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .with_context(|| format!("failed to create directory {}", parent.display()))?;
+    }
+    tokio::fs::write(&output_path, bytes)
+        .await
+        .with_context(|| format!("failed to write {}", output_path.display()))?;
+
+    Ok(output_path)
+}
 
 async fn resolve_prompt(
     prompt: Option<&str>,
@@ -432,5 +805,95 @@ fn print_task(task: &VideoTask) {
     }
     if let Some(ref err) = task.error {
         println!("  Error:      {} - {}", err.code, err.message);
+    }
+}
+
+fn print_happyhorse_task(task: &DashScopeVideoTask) {
+    println!("  ID:         {}", task.task_id.as_deref().unwrap_or("-"));
+    println!("  Status:     {}", task.task_status);
+    if let Some(ref prompt) = task.orig_prompt {
+        println!("  Prompt:     {prompt}");
+    }
+    if let Some(ref url) = task.video_url {
+        println!("  Video URL:  {url}");
+    }
+    if task.code.is_some() || task.message.is_some() {
+        println!(
+            "  Error:      {}{}{}",
+            task.code.as_deref().unwrap_or("unknown"),
+            if task.code.is_some() && task.message.is_some() {
+                " - "
+            } else {
+                ""
+            },
+            task.message.as_deref().unwrap_or("")
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        HappyHorseMode, validate_duration, validate_happyhorse_inputs, validate_resolution,
+    };
+
+    #[test]
+    fn fast_model_rejects_high_resolutions() {
+        assert!(validate_resolution("doubao-seedance-2-0-fast-260128", None, "1080p").is_err());
+        assert!(validate_resolution("doubao-seedance-2-0-fast-260128", None, "4k").is_err());
+    }
+
+    #[test]
+    fn full_model_accepts_high_resolutions() {
+        assert!(validate_resolution("doubao-seedance-2-0-260128", None, "1080p").is_ok());
+        assert!(validate_resolution("doubao-seedance-2-0-260128", None, "4k").is_ok());
+    }
+
+    #[test]
+    fn happyhorse_has_distinct_resolution_and_duration_ranges() {
+        let mode = Some(HappyHorseMode::TextToVideo);
+        assert!(validate_resolution("happyhorse-1.1-t2v", mode, "480p").is_err());
+        assert!(validate_resolution("happyhorse-1.1-t2v", mode, "1080p").is_ok());
+        assert!(validate_duration(mode, 3).is_ok());
+        assert!(validate_duration(mode, 16).is_err());
+    }
+
+    #[test]
+    fn happyhorse_reference_mode_requires_prompt_and_images() {
+        let no_media = Vec::new();
+        assert!(
+            validate_happyhorse_inputs(
+                HappyHorseMode::ReferenceToVideo,
+                Some("Use [Image 1] as the character"),
+                None,
+                None,
+                &no_media,
+                &no_media,
+                &no_media,
+                false,
+                false,
+                false,
+                None,
+            )
+            .is_err()
+        );
+
+        let images = vec!["reference.png".to_string()];
+        assert!(
+            validate_happyhorse_inputs(
+                HappyHorseMode::ReferenceToVideo,
+                Some("Use [Image 1] as the character"),
+                None,
+                None,
+                &images,
+                &no_media,
+                &no_media,
+                false,
+                false,
+                false,
+                Some(42),
+            )
+            .is_ok()
+        );
     }
 }
