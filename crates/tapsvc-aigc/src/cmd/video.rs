@@ -134,6 +134,7 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
             if happyhorse_mode.is_none() && model.starts_with("happyhorse-") {
                 bail!("unsupported HappyHorse model: {model}");
             }
+            validate_camera_fixed(&model, happyhorse_mode, camera_fixed)?;
             if happyhorse_mode == Some(HappyHorseMode::VideoEdit) && duration.is_some() {
                 bail!("happyhorse-1.0-video-edit does not support --duration");
             }
@@ -160,7 +161,6 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
                     &ref_video,
                     &ref_audio,
                     no_audio,
-                    camera_fixed,
                     web_search,
                     seed,
                 )?;
@@ -461,7 +461,6 @@ fn validate_happyhorse_inputs(
     ref_video: &[String],
     ref_audio: &[String],
     no_audio: bool,
-    camera_fixed: bool,
     web_search: bool,
     seed: Option<u64>,
 ) -> anyhow::Result<()> {
@@ -520,14 +519,31 @@ fn validate_happyhorse_inputs(
     if no_audio {
         bail!("HappyHorse models do not support --no-audio");
     }
-    if camera_fixed {
-        bail!("HappyHorse models do not support --camera-fixed");
-    }
     if web_search {
         bail!("HappyHorse models do not support --web-search");
     }
     if seed.is_some_and(|value| value > 2_147_483_647) {
         bail!("HappyHorse seed must be between 0 and 2147483647");
+    }
+
+    Ok(())
+}
+
+fn validate_camera_fixed(
+    model: &str,
+    happyhorse_mode: Option<HappyHorseMode>,
+    camera_fixed: bool,
+) -> anyhow::Result<()> {
+    if !camera_fixed {
+        return Ok(());
+    }
+    if happyhorse_mode.is_some() {
+        bail!("HappyHorse models do not support --camera-fixed");
+    }
+    if model.starts_with("doubao-seedance-2-0") || model.starts_with("doubao-seedance-2.0") {
+        bail!(
+            "Seedance 2.0 models do not support --camera-fixed; describe a static or locked-off shot in the prompt instead"
+        );
     }
 
     Ok(())
@@ -834,7 +850,8 @@ fn print_happyhorse_task(task: &DashScopeVideoTask) {
 #[cfg(test)]
 mod tests {
     use super::{
-        HappyHorseMode, validate_duration, validate_happyhorse_inputs, validate_resolution,
+        HappyHorseMode, validate_camera_fixed, validate_duration, validate_happyhorse_inputs,
+        validate_resolution,
     };
 
     #[test]
@@ -872,7 +889,6 @@ mod tests {
                 &no_media,
                 false,
                 false,
-                false,
                 None,
             )
             .is_err()
@@ -890,10 +906,24 @@ mod tests {
                 &no_media,
                 false,
                 false,
-                false,
                 Some(42),
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn camera_fixed_rejects_current_video_models() {
+        assert!(validate_camera_fixed("doubao-seedance-2-0-260128", None, true).is_err());
+        assert!(validate_camera_fixed("doubao-seedance-2.0", None, true).is_err());
+        assert!(
+            validate_camera_fixed(
+                "happyhorse-1.1-t2v",
+                Some(HappyHorseMode::TextToVideo),
+                true,
+            )
+            .is_err()
+        );
+        assert!(validate_camera_fixed("doubao-seedance-1-0-pro-250528", None, true).is_ok());
     }
 }

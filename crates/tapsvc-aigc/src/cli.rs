@@ -214,7 +214,7 @@ pub enum VideoCommand {
         #[arg(long, default_value_t = false)]
         web_search: bool,
 
-        /// Fix camera position
+        /// Fix camera position (compatible legacy ARK models only)
         #[arg(long, default_value_t = false)]
         camera_fixed: bool,
 

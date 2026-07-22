@@ -72,6 +72,7 @@ pub struct CreateVideoTaskRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub watermark: Option<bool>,
 
+    /// Supported by compatible legacy models, but not by Seedance 2.0.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub camera_fixed: Option<bool>,
 

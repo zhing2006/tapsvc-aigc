@@ -32,6 +32,7 @@ Stop and inform the user on violation — do NOT rely on CLI error messages.
 | `--ref-image` | Max 9 | Repeatable, but no more than 9 |
 | `--ref-video` | Max 3, URL only | Local file paths not supported |
 | `--ref-audio` | Max 3 | Supports both local files and URLs |
+| `--camera-fixed` | Unsupported for Seedance 2.0 and HappyHorse | Describe a static or locked-off shot directly in the prompt |
 | Input | At least one required | `--prompt`/`--prompt-file`, `--first-frame`, `--ref-image`, or `--ref-video` |
 
 ### HappyHorse Constraints
@@ -81,6 +82,10 @@ tapsvc-aigc video get <task_id> --provider happyhorse
 > On timeout, it outputs the task_id — use `video get <task_id>` to check status.
 > Video download URL is valid for 24 hours.
 
+Do not pass `--camera-fixed` to any model listed above. Seedance 2.0 does not
+support the API parameter; request a static or locked-off shot in the prompt
+instead. The CLI option is retained only for older compatible ARK models.
+
 Do NOT use `video list` or `video delete`.
 
 ## Prompt Guidance Sources
@@ -88,6 +93,7 @@ Do NOT use `video list` or `video delete`.
 Prefer first-party guidance over generic prompt collections:
 
 - [Volcengine Seedance 2.0 prompt guide](https://www.volcengine.com/docs/82379/2222480)
+- [Volcengine video generation API reference](https://www.volcengine.com/docs/82379/1520757)
 - [ByteDance Seedance 2.0 product examples](https://seed.bytedance.com/zh/seedance2_0)
 - HappyHorse API examples for [text-to-video](https://help.aliyun.com/zh/model-studio/happyhorse-text-to-video-api-reference),
   [image-to-video](https://help.aliyun.com/zh/model-studio/happyhorse-image-to-video-api-reference),
@@ -306,7 +312,7 @@ seed can improve repeatability but does not guarantee identical output.
 | 环绕 | Orbit | Move around a subject |
 | 升降 | Crane up/down | Move vertically |
 | 手持 | Handheld | Controlled natural shake |
-| 固定 | Static / Locked off | Use `--camera-fixed` for Seedance |
+| 固定 | Static / Locked off | Write the static/locked-off instruction in the Seedance 2.0 prompt |
 
 ## Other Parameters
 
@@ -316,7 +322,7 @@ seed can improve repeatability but does not guarantee identical output.
 | `--aspect-ratio` | `adaptive` | `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `21:9`, `adaptive` |
 | `--duration` | `5` | Seedance: 4-15 or `-1`; HappyHorse generation: 3-15; video edit follows input |
 | `--no-audio` | false | Disable audio generation |
-| `--camera-fixed` | false | Lock camera position |
+| `--camera-fixed` | false | Legacy ARK models only; unsupported by Seedance 2.0 and HappyHorse |
 | `--watermark` | false | Add watermark |
 | `--web-search` | false | Enable web search enhancement |
 | `--seed` | random | Fix seed for reproducibility |

@@ -247,7 +247,7 @@ tapsvc-aigc video generate \
 | `--no-audio` | 否 | `false` | 禁用音频生成（默认生成音频） |
 | `--watermark` | 否 | `false` | 添加水印 |
 | `--web-search` | 否 | `false` | 启用网络搜索增强 |
-| `--camera-fixed` | 否 | `false` | 固定镜头 |
+| `--camera-fixed` | 否 | `false` | 仅兼容支持该字段的旧版 ARK 模型；Seedance 2.0 与 HappyHorse 不支持 |
 | `--seed` | 否 | — | 随机种子 |
 | `--poll-interval` | 否 | `10` | 轮询间隔（秒） |
 | `--timeout` | 否 | `300` | 超时时间（秒） |
@@ -256,6 +256,9 @@ tapsvc-aigc video generate \
 Seedance 完整版还支持 1080p/4k，fast 版仅支持 480p/720p。HappyHorse 支持
 720p/1080p，其中 t2v/i2v/r2v 时长为 3-15 秒；video-edit 不接受时长参数。
 HappyHorse 任务通过 `video get <task-id> --provider happyhorse` 查询。
+
+Seedance 2.0 暂不支持 `camera_fixed` API 参数。需要固定镜头时，应在提示词中
+直接描述“固定镜头”或“静态机位”；CLI 会拒绝向 Seedance 2.0 发送该参数。
 
 > *`--prompt`/`--prompt-file` 至少需要与 `--first-frame`、`--ref-image`、`--ref-video` 中的一种共同提供，或单独提供 prompt 进行文生视频。
 
@@ -610,7 +613,7 @@ tapsvc-aigc-core = { path = "crates/tapsvc-aigc-core" }
 ```toml
 [package]
 name = "tapsvc-aigc"
-version = "0.1.2"
+version = "0.1.3"
 edition.workspace = true
 license.workspace = true
 
@@ -636,7 +639,7 @@ base64.workspace = true
 ```toml
 [package]
 name = "tapsvc-aigc-openai"
-version = "0.1.2"
+version = "0.1.3"
 edition.workspace = true
 license.workspace = true
 
@@ -655,7 +658,7 @@ tokio = { workspace = true, features = ["time"] }
 ```toml
 [package]
 name = "tapsvc-aigc-ark"
-version = "0.1.2"
+version = "0.1.3"
 edition.workspace = true
 license.workspace = true
 
