@@ -79,6 +79,22 @@ pub struct CreateVideoTaskRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<u64>,
 
+    /// Output container (`mp4` or `mov`). Seedance 2.5 only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_format: Option<String>,
+
+    /// Queue priority `0`-`9`; higher jumps ahead of lower-priority queued tasks.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<u8>,
+
+    /// Seconds after creation before an unfinished task is marked `expired`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution_expires_after: Option<u32>,
+
+    /// Also return the generated video's last frame as an image URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub return_last_frame: Option<bool>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<VideoTaskTool>>,
 }

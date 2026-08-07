@@ -61,8 +61,23 @@ tapsvc-aigc 是一个 Rust CLI 工具，通过 TapSvc AI Gateway 的兼容协议
 
 视频生成走 Volcengine ARK 原生 API（非 OpenAI 兼容端点），通过 `-m` 参数直接传入 API model ID：
 
+- `bytedance/seedance-2.5` — Seedance 2.5，最长 30 秒单次连贯输出，网关侧映射到 ARK 的 `doubao-seedance-2-5`
 - `doubao-seedance-2-0-260128` — 标准版，质量最优
 - `doubao-seedance-2-0-fast-260128` — 快速版，速度优先
+
+> ARK 原生 ID `doubao-seedance-2-5-260628` **未**在网关上配置，必须使用 `bytedance/seedance-2.5`。
+
+**2.5 与 2.0 系列的差异：**
+
+| 能力 | `bytedance/seedance-2.5` | `doubao-seedance-2-0-*` |
+|------|--------------------------|--------------------------|
+| 时长 | 4-30 秒 | 4-15 秒 |
+| 分辨率 | 480p、720p | 480p、720p（完整版另有 1080p、4k） |
+| 参考图 / 视频 / 音频上限 | 30 / 10 / 10 | 9 / 3 / 3 |
+| 仅音频输入 | ✅ | ❌（需搭配参考图或参考视频） |
+| `--output-format mov` | ✅ | ❌ |
+| `--camera-fixed` | ❌ | ❌ |
+| `--aspect-ratio` | 首帧任务强制 `adaptive`（输出跟随首帧） | 可自由选择 |
 
 HappyHorse 走 DashScope 原生异步 API：
 
@@ -199,6 +214,33 @@ tapsvc-aigc video generate \
   --resolution 720p \
   -o dog.mp4
 
+# Seedance 2.5 — 30 秒单镜长镜头，mov 输出便于后期
+tapsvc-aigc video generate \
+  -m bytedance/seedance-2.5 \
+  --prompt-file storyboard.txt \
+  --duration 30 \
+  --output-format mov \
+  --timeout 900 \
+  -o long_take.mov
+
+# Seedance 2.5 — 纯音频驱动（无需参考图/视频）
+tapsvc-aigc video generate \
+  -m bytedance/seedance-2.5 \
+  --prompt "画面随音频的鼓点切换，霓虹雨夜街道，镜头平稳横移" \
+  --ref-audio drums.mp3 \
+  --aspect-ratio 21:9 \
+  --duration 12 \
+  -o rhythm.mp4
+
+# Seedance 2.5 — 保存尾帧用于串接下一段
+tapsvc-aigc video generate \
+  -m bytedance/seedance-2.5 \
+  --prompt "女孩走向窗边，缓慢推镜头" \
+  --return-last-frame \
+  --duration 10 \
+  --timeout 600 \
+  -o clip1.mp4
+
 # 首帧图生视频
 tapsvc-aigc video generate \
   -m doubao-seedance-2-0-fast-260128 \
@@ -238,27 +280,35 @@ tapsvc-aigc video generate \
 | `--prompt-file` | 否 | — | 从文件读取提示词，可与 `--prompt` 同时使用（file 在前拼接） |
 | `--first-frame` | 否 | — | 首帧图片（图生视频，与 `--ref-image`/`--ref-video` 互斥） |
 | `--last-frame` | 否 | — | 尾帧图片（需搭配 `--first-frame`） |
-| `--ref-image` | 否 | — | 参考图片（可重复，最多 9 张，与 `--first-frame` 互斥） |
-| `--ref-video` | 否 | — | 参考视频 URL（可重复，最多 3 个，仅支持 URL，与 `--first-frame` 互斥） |
-| `--ref-audio` | 否 | — | 参考音频（可重复，最多 3 个，需搭配 `--ref-image` 或 `--ref-video`） |
-| `--resolution` | 否 | `720p` | 分辨率（按模型支持 `480p`、`720p`、`1080p`、`4k`） |
-| `--aspect-ratio` | 否 | `adaptive` | 宽高比（`16:9`、`4:3`、`1:1`、`3:4`、`9:16`、`21:9`、`adaptive`） |
-| `--duration` | 否 | `5` | Seedance 为 4-15 秒或 -1 自动；HappyHorse 生成模型为 3-15 秒；video-edit 不支持 |
+| `--ref-image` | 否 | — | 参考图片（可重复，2.5 最多 30 张 / 其他最多 9 张，与 `--first-frame` 互斥） |
+| `--ref-video` | 否 | — | 参考视频 URL（可重复，2.5 最多 10 个 / 其他最多 3 个，仅支持 URL，与 `--first-frame` 互斥） |
+| `--ref-audio` | 否 | — | 参考音频（可重复，2.5 最多 10 个 / 其他最多 3 个；2.5 可单独使用，其他需搭配 `--ref-image` 或 `--ref-video`） |
+| `--resolution` | 否 | `720p` | 分辨率（按模型支持 `480p`、`720p`、`1080p`、`4k`；2.5 与 fast 版仅 480p/720p） |
+| `--aspect-ratio` | 否 | `adaptive` | 宽高比（`16:9`、`4:3`、`1:1`、`3:4`、`9:16`、`21:9`、`adaptive`）；2.5 首帧任务只能是 `adaptive` |
+| `--duration` | 否 | `5` | Seedance 2.5 为 4-30 秒、2.0 为 4-15 秒，或 -1 自动；HappyHorse 生成模型为 3-15 秒；video-edit 不支持 |
 | `--no-audio` | 否 | `false` | 禁用音频生成（默认生成音频） |
 | `--watermark` | 否 | `false` | 添加水印 |
 | `--web-search` | 否 | `false` | 启用网络搜索增强 |
-| `--camera-fixed` | 否 | `false` | 仅兼容支持该字段的旧版 ARK 模型；Seedance 2.0 与 HappyHorse 不支持 |
+| `--camera-fixed` | 否 | `false` | 仅兼容支持该字段的旧版 ARK 模型；Seedance 2.5/2.0 与 HappyHorse 均不支持 |
 | `--seed` | 否 | — | 随机种子 |
+| `--output-format` | 否 | `mp4` | 输出容器（`mp4`、`mov`），仅 Seedance 2.5 支持；`mov` 保留更高色彩精度，便于剪辑/调色 |
+| `--priority` | 否 | — | 队列优先级 0-9，数值越大越先于同端点排队的低优先级任务（仅 Seedance） |
+| `--expires-after` | 否 | — | 未完成任务被标记 `expired` 前的秒数（3600-259200，默认 48 小时，仅 Seedance） |
+| `--return-last-frame` | 否 | `false` | 额外保存尾帧为 `<输出名>_last_frame.png`，用于串接下一段（仅 Seedance） |
 | `--poll-interval` | 否 | `10` | 轮询间隔（秒） |
-| `--timeout` | 否 | `300` | 超时时间（秒） |
-| `--output, -o` | 否 | `video_{timestamp}.mp4` | 输出文件路径 |
+| `--timeout` | 否 | `300` | 超时时间（秒）；2.5 长时长需显式加大（如 30 秒用 `--timeout 900`） |
+| `--output, -o` | 否 | `video_{timestamp}.{mp4\|mov}` | 输出文件路径 |
 
 Seedance 完整版还支持 1080p/4k，fast 版仅支持 480p/720p。HappyHorse 支持
 720p/1080p，其中 t2v/i2v/r2v 时长为 3-15 秒；video-edit 不接受时长参数。
 HappyHorse 任务通过 `video get <task-id> --provider happyhorse` 查询。
 
-Seedance 2.0 暂不支持 `camera_fixed` API 参数。需要固定镜头时，应在提示词中
-直接描述“固定镜头”或“静态机位”；CLI 会拒绝向 Seedance 2.0 发送该参数。
+Seedance 2.5 与 2.0 均不支持 `camera_fixed` API 参数。需要固定镜头时，应在提示词中
+直接描述“固定镜头”或“静态机位”；CLI 会拒绝向这些模型发送该参数。
+
+Seedance 2.5 独有：30 秒单次连贯输出、`mov` 输出、纯参考音频驱动，以及
+30/10/10 的参考图/视频/音频上限。首帧任务的输出比例始终跟随首帧，
+显式 `--aspect-ratio` 会被拒绝。
 
 > *`--prompt`/`--prompt-file` 至少需要与 `--first-frame`、`--ref-image`、`--ref-video` 中的一种共同提供，或单独提供 prompt 进行文生视频。
 
@@ -279,7 +329,7 @@ tapsvc-aigc video delete <task-id>
 
 | 参数 | 必须 | 默认值 | 说明 |
 |------|------|--------|------|
-| `--status, -s` | 否 | — | 按状态过滤（`queued`/`running`/`succeeded`/`failed`/`cancelled`） |
+| `--status, -s` | 否 | — | 按状态过滤（`queued`/`running`/`succeeded`/`failed`/`cancelled`/`expired`） |
 | `--model, -m` | 否 | — | 按模型过滤 |
 | `--task-ids` | 否 | — | 按 task ID 过滤 |
 | `--page, -p` | 否 | `1` | 页码 |
@@ -422,6 +472,10 @@ Authorization: Bearer {api_key}
 }
 ```
 
+可选字段（`Option::is_none` 时不序列化）：`camera_fixed`、`seed`、`tools`，以及
+Seedance 2.5 相关的 `output_format`（`mp4`/`mov`）、`priority`（0-9）、
+`execution_expires_after`（秒）、`return_last_frame`。
+
 `content` 数组支持以下类型：
 
 | type | role 值 | 说明 |
@@ -458,7 +512,7 @@ Authorization: Bearer {api_key}
 }
 ```
 
-任务状态：`queued` → `running` → `succeeded` / `failed` / `cancelled`
+任务状态：`queued` → `running` → `succeeded` / `failed` / `cancelled` / `expired`（超过 `execution_expires_after` 仍未完成）
 
 #### 4.4.3 列出任务 (list)
 

@@ -7,6 +7,7 @@ endpoint. The CLI selects the provider from the model ID.
 
 | Model | Provider | Best for | Resolution | Duration |
 |---|---|---|---|---|
+| `bytedance/seedance-2.5` | Volcengine | Long single takes, audio-driven video, editing pipelines | 480p, 720p | 4-30 or `-1` auto |
 | `doubao-seedance-2-0-fast-260128` (DEFAULT) | Volcengine | Drafts and rapid iteration | 480p, 720p | 4-15 or `-1` auto |
 | `doubao-seedance-2-0-260128` | Volcengine | Final, high-quality work | 480p, 720p, 1080p, 4k | 4-15 or `-1` auto |
 | `happyhorse-1.1-t2v` | DashScope | Text-to-video | 720p, 1080p | 3-15 |
@@ -16,7 +17,26 @@ endpoint. The CLI selects the provider from the model ID.
 
 Choose Seedance for multimodal reference video/audio workflows and complex
 camera choreography. Choose the exact HappyHorse variant when the task maps to
-one of its focused modes. Use the full Seedance model for 1080p/4k final output.
+one of its focused modes. Use the full Seedance 2.0 model for 1080p/4k final
+output. Reach for `bytedance/seedance-2.5` when the task needs more than 15
+seconds in one take, audio as the driving input, more than 9 reference images, or
+`mov` output for a grading/compositing pipeline.
+
+**Model ID**: `bytedance/seedance-2.5` is the exact ID the gateway accepts. The
+ARK-native `doubao-seedance-2-5-260628` is NOT configured and will fail.
+
+### Seedance 2.5 Exclusives
+
+| Capability | How |
+|---|---|
+| Up to 30 s in one coherent pass | `--duration 30` (storyboard the prompt — see below) |
+| `mov` output for grading/compositing | `--output-format mov` |
+| Audio-only input | `--ref-audio <path>` with no `--ref-image`/`--ref-video` |
+| 30 ref images / 10 ref videos / 10 ref audios | repeat the flags |
+
+Not available on 2.5: `--camera-fixed` (rejected, same as 2.0), and 1080p/4k.
+On 2.5 first-frame tasks `--aspect-ratio` must stay `adaptive` — the output ratio
+follows the first frame.
 
 ## Parameter Constraints
 
@@ -26,14 +46,26 @@ Stop and inform the user on violation — do NOT rely on CLI error messages.
 | Parameter | Constraint | Notes |
 |-----------|------------|-------|
 | `--last-frame` | REQUIRES `--first-frame` | Cannot use end frame alone |
-| `--ref-audio` | REQUIRES `--ref-image` OR `--ref-video` | Reference audio needs visual reference |
+| `--ref-audio` | REQUIRES `--ref-image` OR `--ref-video` | 2.5 accepts reference audio alone |
 | `--first-frame` | EXCLUSIVE WITH `--ref-image`, `--ref-video` | First-frame mode and reference mode are mutually exclusive |
-| `--duration` | 4-15 or -1 | -1 means auto, other values must be in 4-15 range |
-| `--ref-image` | Max 9 | Repeatable, but no more than 9 |
-| `--ref-video` | Max 3, URL only | Local file paths not supported |
-| `--ref-audio` | Max 3 | Supports both local files and URLs |
-| `--camera-fixed` | Unsupported for Seedance 2.0 and HappyHorse | Describe a static or locked-off shot directly in the prompt |
-| Input | At least one required | `--prompt`/`--prompt-file`, `--first-frame`, `--ref-image`, or `--ref-video` |
+| `--duration` | 2.5: 4-30; 2.0: 4-15; or -1 | -1 means auto |
+| `--ref-image` | 2.5: max 30; otherwise max 9 | Repeatable |
+| `--ref-video` | 2.5: max 10; otherwise max 3; URL only | Local file paths not supported |
+| `--ref-audio` | 2.5: max 10; otherwise max 3 | Supports both local files and URLs |
+| `--camera-fixed` | Unsupported for all Seedance and HappyHorse models | Describe a static or locked-off shot directly in the prompt |
+| `--output-format` | Seedance 2.5 ONLY | `mp4` (default) or `mov` |
+| `--priority` | Seedance only, 0-9 | Higher jumps the queue |
+| `--expires-after` | Seedance only, 3600-259200 | Default 48 h |
+| `--return-last-frame` | Seedance only | Saves `<output-stem>_last_frame.png` |
+| `--aspect-ratio` | 2.5 + `--first-frame` → must be `adaptive` | Output follows the first frame |
+| `--resolution` | 2.5 and the fast model: 480p/720p only | 1080p/4k need `doubao-seedance-2-0-260128` |
+| Input | At least one required | `--prompt`/`--prompt-file`, `--first-frame`, `--ref-image`, `--ref-video`, or (2.5 only) `--ref-audio` |
+
+### Timeout
+
+Default `--timeout` is 300 s, which is NOT enough for long 2.5 renders. Raise it
+with duration: `--duration 15` → `--timeout 600`, `--duration 30` → `--timeout 900`.
+On timeout the CLI prints the task_id; recover with `video get <task_id>`.
 
 ### HappyHorse Constraints
 
@@ -57,6 +89,7 @@ Image-to-video:     --first-frame <path> [-p <prompt>] [--last-frame <path>]
 Ref image + text:   --ref-image <path>... -p <prompt>
 Ref video + text:   --ref-video <url>... -p <prompt>
 With audio ref:     --ref-image/--ref-video + --ref-audio <path>...
+Audio-only (2.5):   --ref-audio <path>... [-p <prompt>]
 ```
 
 ## CLI Usage
@@ -69,7 +102,8 @@ tapsvc-aigc video generate -m <model> -p <prompt> [--prompt-file <path>] \
   [--resolution <480p|720p|1080p|4k>] \
   [--aspect-ratio <16:9|4:3|1:1|3:4|4:5|5:4|9:16|9:21|21:9|adaptive>] \
   [--duration <model-specific>] [--no-audio] [--camera-fixed] [--seed <n>] \
-  [--poll-interval <sec>] [--timeout <sec>] [-o <output>]
+  [--output-format <mp4|mov>] [--priority <0-9>] [--expires-after <sec>] \
+  [--return-last-frame] [--poll-interval <sec>] [--timeout <sec>] [-o <output>]
 
 # Query task status
 tapsvc-aigc video get <task_id>
@@ -82,9 +116,43 @@ tapsvc-aigc video get <task_id> --provider happyhorse
 > On timeout, it outputs the task_id — use `video get <task_id>` to check status.
 > Video download URL is valid for 24 hours.
 
-Do not pass `--camera-fixed` to any model listed above. Seedance 2.0 does not
-support the API parameter; request a static or locked-off shot in the prompt
+Each produced file is printed to stdout on its own line. With `--return-last-frame`
+that is two lines: the video, then `<output-stem>_last_frame.png`.
+
+Do not pass `--camera-fixed` to any model listed above. Neither Seedance 2.0 nor
+2.5 supports the API parameter; request a static or locked-off shot in the prompt
 instead. The CLI option is retained only for older compatible ARK models.
+
+### Chaining Clips Beyond 30 Seconds
+
+Save the last frame, then feed it as the next clip's first frame:
+
+```bash
+tapsvc-aigc video generate -m bytedance/seedance-2.5 -p "女孩走向窗边，缓慢推镜头" \
+  --return-last-frame --duration 10 --timeout 600 -o clip1.mp4
+tapsvc-aigc video generate -m bytedance/seedance-2.5 -p "女孩推开窗户，阳光洒入房间" \
+  --first-frame clip1_last_frame.png --duration 10 --timeout 600 -o clip2.mp4
+```
+
+Use `--output-format mov` on both sides of a chain or edit to avoid a second
+generation loss.
+
+### Long Takes on Seedance 2.5
+
+A 30-second request still needs a storyboard — one sentence will not fill it.
+Write 3-5 numbered shots (`镜头1`/`镜头2`/…), each with ONE clear action, one
+camera movement, and its own audio cue. Prefer shot order over exact timestamps.
+
+```text
+镜头1：清晨的旧书店，中景固定机位，老店主推开木门，铜铃轻响。
+镜头2：切至书架特写缓慢横移，尘埃在斜射晨光中浮动。
+镜头3：切至中景，一位年轻女子推门进来，抬头环视，脚步声在木地板上回响。
+镜头4：切至两人过肩近景，店主指向角落的一本旧书并说："你要找的，一直在那里。"
+全程暖色调，电影质感，动作衔接自然，只有环境声与轻微钢琴单音。
+```
+
+For dense action (fights, chases, montage) generate shorter clips and chain them
+via `--return-last-frame` instead of overloading one 30 s prompt.
 
 Do NOT use `video list` or `video delete`.
 

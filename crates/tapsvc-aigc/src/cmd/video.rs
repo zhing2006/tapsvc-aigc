@@ -79,11 +79,17 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
             web_search,
             camera_fixed,
             seed,
+            output_format,
+            priority,
+            expires_after,
+            return_last_frame,
             poll_interval,
             timeout,
             output,
         } => {
             // ── Validate inputs ──
+
+            let seedance_2_5 = is_seedance_2_5(&model);
 
             let has_prompt = prompt.is_some() || prompt_file.is_some();
             let has_first_frame = first_frame.is_some();
@@ -91,9 +97,11 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
             let has_ref_video = !ref_video.is_empty();
             let has_ref_audio = !ref_audio.is_empty();
 
-            if !has_prompt && !has_first_frame && !has_ref_image && !has_ref_video {
+            // Seedance 2.5 can drive a video from reference audio alone.
+            let audio_alone = seedance_2_5 && has_ref_audio;
+            if !has_prompt && !has_first_frame && !has_ref_image && !has_ref_video && !audio_alone {
                 bail!(
-                    "at least one input is required: --prompt, --prompt-file, --first-frame, --ref-image, or --ref-video"
+                    "at least one input is required: --prompt, --prompt-file, --first-frame, --ref-image, or --ref-video (Seedance 2.5 also accepts --ref-audio alone)"
                 );
             }
 
@@ -107,25 +115,30 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
                 );
             }
 
-            if has_ref_audio && !has_ref_image && !has_ref_video {
-                bail!("--ref-audio requires --ref-image or --ref-video");
+            if has_ref_audio && !has_ref_image && !has_ref_video && !seedance_2_5 {
+                bail!("--ref-audio requires --ref-image or --ref-video on {model}");
             }
 
-            if ref_image.len() > 9 {
+            let (max_ref_images, max_ref_videos, max_ref_audios) = if seedance_2_5 {
+                (30, 10, 10)
+            } else {
+                (9, 3, 3)
+            };
+            if ref_image.len() > max_ref_images {
                 bail!(
-                    "--ref-image supports at most 9 images, got {}",
+                    "--ref-image supports at most {max_ref_images} images on {model}, got {}",
                     ref_image.len()
                 );
             }
-            if ref_video.len() > 3 {
+            if ref_video.len() > max_ref_videos {
                 bail!(
-                    "--ref-video supports at most 3 videos, got {}",
+                    "--ref-video supports at most {max_ref_videos} videos on {model}, got {}",
                     ref_video.len()
                 );
             }
-            if ref_audio.len() > 3 {
+            if ref_audio.len() > max_ref_audios {
                 bail!(
-                    "--ref-audio supports at most 3 audio files, got {}",
+                    "--ref-audio supports at most {max_ref_audios} audio files on {model}, got {}",
                     ref_audio.len()
                 );
             }
@@ -135,13 +148,26 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
                 bail!("unsupported HappyHorse model: {model}");
             }
             validate_camera_fixed(&model, happyhorse_mode, camera_fixed)?;
+            validate_seedance_only_options(
+                happyhorse_mode,
+                output_format.as_deref(),
+                priority,
+                expires_after,
+                return_last_frame,
+            )?;
             if happyhorse_mode == Some(HappyHorseMode::VideoEdit) && duration.is_some() {
                 bail!("happyhorse-1.0-video-edit does not support --duration");
             }
             let duration = duration.unwrap_or(5);
-            validate_duration(happyhorse_mode, duration)?;
+            validate_duration(&model, happyhorse_mode, duration)?;
             validate_resolution(&model, happyhorse_mode, &resolution)?;
             validate_aspect_ratio(happyhorse_mode, &aspect_ratio)?;
+            validate_seedance_2_5_options(
+                &model,
+                has_first_frame,
+                &aspect_ratio,
+                output_format.as_deref(),
+            )?;
 
             for url in &ref_video {
                 if !url.starts_with("http://") && !url.starts_with("https://") {
@@ -245,6 +271,9 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
                 None
             };
 
+            // Kept for the default output file name after `output_format` moves into the request.
+            let container = output_format.clone().unwrap_or_else(|| "mp4".to_string());
+
             let req = CreateVideoTaskRequest {
                 model,
                 content,
@@ -255,6 +284,10 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
                 watermark: Some(watermark),
                 camera_fixed: if camera_fixed { Some(true) } else { None },
                 seed,
+                output_format,
+                priority,
+                execution_expires_after: expires_after,
+                return_last_frame: if return_last_frame { Some(true) } else { None },
                 tools,
             };
 
@@ -299,8 +332,33 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
                             .and_then(|c| c.video_url.as_deref())
                             .context("no video URL in task result")?;
 
-                        let output_path = download_video(video_url, output.as_deref()).await?;
+                        let output_path =
+                            download_video(video_url, output.as_deref(), &container).await?;
                         println!("{}", output_path.display());
+
+                        // Only present when the task was created with return_last_frame;
+                        // useful as the next clip's first frame.
+                        if return_last_frame {
+                            match task
+                                .content
+                                .as_ref()
+                                .and_then(|c| c.last_frame_url.as_deref())
+                            {
+                                Some(url) => {
+                                    let stem = output_path
+                                        .file_stem()
+                                        .map(|s| s.to_string_lossy().into_owned())
+                                        .unwrap_or_else(|| "video".to_string());
+                                    let frame_path = output_path
+                                        .with_file_name(format!("{stem}_last_frame.png"));
+                                    download_asset(url, &frame_path).await?;
+                                    println!("{}", frame_path.display());
+                                }
+                                None => eprintln!(
+                                    "warning: --return-last-frame was requested but the task returned no last frame URL"
+                                ),
+                            }
+                        }
                         break;
                     }
                     "failed" => {
@@ -313,6 +371,9 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
                     }
                     "cancelled" => {
                         bail!("video generation was cancelled (task: {task_id})");
+                    }
+                    "expired" => {
+                        bail!("video generation task expired before finishing (task: {task_id})");
                     }
                     other => {
                         eprintln!("Status: {other}, waiting... ({elapsed}s elapsed)");
@@ -391,12 +452,22 @@ pub async fn handle(command: VideoCommand) -> anyhow::Result<()> {
 
 // ── Helpers ──
 
-fn validate_duration(mode: Option<HappyHorseMode>, duration: i32) -> anyhow::Result<()> {
+fn validate_duration(
+    model: &str,
+    mode: Option<HappyHorseMode>,
+    duration: i32,
+) -> anyhow::Result<()> {
     match mode {
         Some(HappyHorseMode::VideoEdit) => {}
         Some(_) => {
             if !(3..=15).contains(&duration) {
                 bail!("HappyHorse duration must be between 3 and 15 seconds");
+            }
+        }
+        // Seedance 2.5 holds 30 coherent seconds in one pass; the 2.0 series stops at 15.
+        None if is_seedance_2_5(model) => {
+            if duration != -1 && !(4..=30).contains(&duration) {
+                bail!("Seedance 2.5 duration must be between 4 and 30 seconds, or -1 for auto");
             }
         }
         None if duration != -1 && !(4..=15).contains(&duration) => {
@@ -417,7 +488,9 @@ fn validate_resolution(
         if !matches!(resolution, "720p" | "1080p") {
             bail!("HappyHorse only supports 720p and 1080p");
         }
-    } else if model == "doubao-seedance-2-0-fast-260128" && !matches!(resolution, "480p" | "720p") {
+    } else if (model == "doubao-seedance-2-0-fast-260128" || is_seedance_2_5(model))
+        && !matches!(resolution, "480p" | "720p")
+    {
         bail!(
             "model {model} only supports 480p and 720p; use doubao-seedance-2-0-260128 for {resolution}"
         );
@@ -540,10 +613,71 @@ fn validate_camera_fixed(
     if happyhorse_mode.is_some() {
         bail!("HappyHorse models do not support --camera-fixed");
     }
+    if is_seedance_2_5(model) {
+        bail!(
+            "Seedance 2.5 does not support --camera-fixed; describe a static or locked-off shot in the prompt instead"
+        );
+    }
     if model.starts_with("doubao-seedance-2-0") || model.starts_with("doubao-seedance-2.0") {
         bail!(
             "Seedance 2.0 models do not support --camera-fixed; describe a static or locked-off shot in the prompt instead"
         );
+    }
+
+    Ok(())
+}
+
+/// Seedance 2.5 is exposed as `bytedance/seedance-2.5` through the gateway and as
+/// `doubao-seedance-2-5-*` on ARK directly; match both spellings.
+fn is_seedance_2_5(model: &str) -> bool {
+    let model = model.to_ascii_lowercase();
+    model.contains("seedance-2.5") || model.contains("seedance-2-5")
+}
+
+/// Request fields the ARK API accepts only from Seedance 2.5, plus the ratio
+/// restriction it enforces on first-frame tasks.
+fn validate_seedance_2_5_options(
+    model: &str,
+    has_first_frame: bool,
+    aspect_ratio: &str,
+    output_format: Option<&str>,
+) -> anyhow::Result<()> {
+    if is_seedance_2_5(model) {
+        // The output ratio always follows the first frame, so an explicit one is rejected.
+        if has_first_frame && aspect_ratio != "adaptive" {
+            bail!(
+                "{model} only supports --aspect-ratio adaptive with --first-frame; the output follows the first frame"
+            );
+        }
+    } else if output_format.is_some() {
+        bail!("--output-format is only supported by Seedance 2.5, not {model}");
+    }
+
+    Ok(())
+}
+
+/// ARK-only request fields; the DashScope API behind HappyHorse has no equivalent.
+fn validate_seedance_only_options(
+    happyhorse_mode: Option<HappyHorseMode>,
+    output_format: Option<&str>,
+    priority: Option<u8>,
+    expires_after: Option<u32>,
+    return_last_frame: bool,
+) -> anyhow::Result<()> {
+    if happyhorse_mode.is_none() {
+        return Ok(());
+    }
+    if output_format.is_some() {
+        bail!("HappyHorse models do not support --output-format");
+    }
+    if priority.is_some() {
+        bail!("HappyHorse models do not support --priority");
+    }
+    if expires_after.is_some() {
+        bail!("HappyHorse models do not support --expires-after");
+    }
+    if return_last_frame {
+        bail!("HappyHorse models do not support --return-last-frame");
     }
 
     Ok(())
@@ -660,7 +794,7 @@ async fn generate_happyhorse(options: HappyHorseGenerateOptions) -> anyhow::Resu
                     .video_url
                     .as_deref()
                     .context("no video URL in HappyHorse task result")?;
-                let output_path = download_video(video_url, output.as_deref()).await?;
+                let output_path = download_video(video_url, output.as_deref(), "mp4").await?;
                 println!("{}", output_path.display());
                 return Ok(());
             }
@@ -686,23 +820,33 @@ async fn generate_happyhorse(options: HappyHorseGenerateOptions) -> anyhow::Resu
     }
 }
 
-async fn download_video(url: &str, output: Option<&str>) -> anyhow::Result<PathBuf> {
+async fn download_video(
+    url: &str,
+    output: Option<&str>,
+    container: &str,
+) -> anyhow::Result<PathBuf> {
+    let output_path = output.map(PathBuf::from).unwrap_or_else(|| {
+        let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+        PathBuf::from(format!("video_{timestamp}.{container}"))
+    });
+    download_asset(url, &output_path).await?;
+
+    Ok(output_path)
+}
+
+async fn download_asset(url: &str, output_path: &Path) -> anyhow::Result<()> {
     let response = reqwest::Client::new()
         .get(url)
         .send()
         .await
-        .context("failed to download generated video")?
+        .context("failed to download generated asset")?
         .error_for_status()
-        .context("video download returned an error status")?;
+        .context("asset download returned an error status")?;
     let bytes = response
         .bytes()
         .await
-        .context("failed to read generated video")?;
+        .context("failed to read generated asset")?;
 
-    let output_path = output.map(PathBuf::from).unwrap_or_else(|| {
-        let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-        PathBuf::from(format!("video_{timestamp}.mp4"))
-    });
     if let Some(parent) = output_path.parent()
         && !parent.as_os_str().is_empty()
     {
@@ -710,11 +854,11 @@ async fn download_video(url: &str, output: Option<&str>) -> anyhow::Result<PathB
             .await
             .with_context(|| format!("failed to create directory {}", parent.display()))?;
     }
-    tokio::fs::write(&output_path, bytes)
+    tokio::fs::write(output_path, bytes)
         .await
         .with_context(|| format!("failed to write {}", output_path.display()))?;
 
-    Ok(output_path)
+    Ok(())
 }
 
 async fn resolve_prompt(
@@ -851,7 +995,7 @@ fn print_happyhorse_task(task: &DashScopeVideoTask) {
 mod tests {
     use super::{
         HappyHorseMode, validate_camera_fixed, validate_duration, validate_happyhorse_inputs,
-        validate_resolution,
+        validate_resolution, validate_seedance_2_5_options, validate_seedance_only_options,
     };
 
     #[test]
@@ -871,8 +1015,50 @@ mod tests {
         let mode = Some(HappyHorseMode::TextToVideo);
         assert!(validate_resolution("happyhorse-1.1-t2v", mode, "480p").is_err());
         assert!(validate_resolution("happyhorse-1.1-t2v", mode, "1080p").is_ok());
-        assert!(validate_duration(mode, 3).is_ok());
-        assert!(validate_duration(mode, 16).is_err());
+        assert!(validate_duration("happyhorse-1.1-t2v", mode, 3).is_ok());
+        assert!(validate_duration("happyhorse-1.1-t2v", mode, 16).is_err());
+    }
+
+    #[test]
+    fn seedance_2_5_extends_duration_and_caps_resolution() {
+        assert!(validate_duration("bytedance/seedance-2.5", None, 30).is_ok());
+        assert!(validate_duration("bytedance/seedance-2.5", None, 31).is_err());
+        assert!(validate_duration("doubao-seedance-2-0-260128", None, 30).is_err());
+        assert!(validate_resolution("bytedance/seedance-2.5", None, "720p").is_ok());
+        assert!(validate_resolution("bytedance/seedance-2.5", None, "1080p").is_err());
+    }
+
+    #[test]
+    fn seedance_2_5_rejects_camera_fixed_and_owns_output_format() {
+        assert!(validate_camera_fixed("bytedance/seedance-2.5", None, true).is_err());
+        assert!(
+            validate_seedance_2_5_options("bytedance/seedance-2.5", false, "adaptive", Some("mov"))
+                .is_ok()
+        );
+        // The output ratio follows the first frame, so an explicit ratio is rejected.
+        assert!(
+            validate_seedance_2_5_options("bytedance/seedance-2.5", true, "16:9", None).is_err()
+        );
+        assert!(
+            validate_seedance_2_5_options("bytedance/seedance-2.5", true, "adaptive", None).is_ok()
+        );
+        // mov is exclusive to 2.5.
+        assert!(
+            validate_seedance_2_5_options("doubao-seedance-2-0-260128", false, "16:9", Some("mov"))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn happyhorse_rejects_seedance_only_options() {
+        let mode = Some(HappyHorseMode::TextToVideo);
+        assert!(validate_seedance_only_options(mode, Some("mov"), None, None, false).is_err());
+        assert!(validate_seedance_only_options(mode, None, Some(5), None, false).is_err());
+        assert!(validate_seedance_only_options(mode, None, None, Some(3600), false).is_err());
+        assert!(validate_seedance_only_options(mode, None, None, None, true).is_err());
+        assert!(
+            validate_seedance_only_options(None, Some("mov"), Some(5), Some(3600), true).is_ok()
+        );
     }
 
     #[test]

@@ -151,7 +151,14 @@ pub enum AudioCommand {
     },
 }
 
-const VIDEO_TASK_STATUSES: [&str; 5] = ["queued", "running", "succeeded", "failed", "cancelled"];
+const VIDEO_TASK_STATUSES: [&str; 6] = [
+    "queued",
+    "running",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "expired",
+];
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
@@ -178,27 +185,27 @@ pub enum VideoCommand {
         #[arg(long)]
         last_frame: Option<String>,
 
-        /// Reference image path/URL (repeatable, max 9, mutually exclusive with --first-frame)
+        /// Reference image path/URL (repeatable, max 30 on Seedance 2.5 / 9 otherwise, mutually exclusive with --first-frame)
         #[arg(long, action = clap::ArgAction::Append)]
         ref_image: Vec<String>,
 
-        /// Reference video URL (repeatable, max 3, URL only, mutually exclusive with --first-frame)
+        /// Reference video URL (repeatable, max 10 on Seedance 2.5 / 3 otherwise, URL only, mutually exclusive with --first-frame)
         #[arg(long, action = clap::ArgAction::Append)]
         ref_video: Vec<String>,
 
-        /// Reference audio path/URL (repeatable, max 3, requires --ref-image or --ref-video)
+        /// Reference audio path/URL (repeatable, max 10 on Seedance 2.5 / 3 otherwise; Seedance 2.5 accepts audio alone, other models require --ref-image or --ref-video)
         #[arg(long, action = clap::ArgAction::Append)]
         ref_audio: Vec<String>,
 
-        /// Resolution (480p, 720p, 1080p, 4k; fast model supports 480p/720p only)
+        /// Resolution (480p, 720p, 1080p, 4k; Seedance 2.5 and the fast model support 480p/720p only)
         #[arg(long, default_value = "720p", value_parser = ["480p", "720p", "1080p", "4k"])]
         resolution: String,
 
-        /// Aspect ratio (availability depends on the selected model)
+        /// Aspect ratio (availability depends on the selected model; Seedance 2.5 requires adaptive with --first-frame)
         #[arg(long, default_value = "adaptive", value_parser = ["16:9", "4:3", "1:1", "3:4", "4:5", "5:4", "9:16", "9:21", "21:9", "adaptive"])]
         aspect_ratio: String,
 
-        /// Video duration in seconds (defaults to 5; unsupported for HappyHorse video edit)
+        /// Video duration in seconds (defaults to 5; 4-30 on Seedance 2.5, 4-15 on Seedance 2.0; unsupported for HappyHorse video edit)
         #[arg(long)]
         duration: Option<i32>,
 
@@ -221,6 +228,22 @@ pub enum VideoCommand {
         /// Random seed for reproducibility
         #[arg(long)]
         seed: Option<u64>,
+
+        /// Output container (mp4, mov). Seedance 2.5 only; mov keeps higher color precision for editing
+        #[arg(long, value_parser = ["mp4", "mov"])]
+        output_format: Option<String>,
+
+        /// Queue priority (0-9, higher jumps ahead of lower-priority queued tasks). Seedance only
+        #[arg(long, value_parser = clap::value_parser!(u8).range(0..=9))]
+        priority: Option<u8>,
+
+        /// Seconds before an unfinished task is marked expired (3600-259200, default 48h). Seedance only
+        #[arg(long, value_parser = clap::value_parser!(u32).range(3600..=259200))]
+        expires_after: Option<u32>,
+
+        /// Also save the video's last frame as <output>_last_frame.png (for chaining clips). Seedance only
+        #[arg(long, default_value_t = false)]
+        return_last_frame: bool,
 
         /// Poll interval in seconds
         #[arg(long, default_value_t = 10)]

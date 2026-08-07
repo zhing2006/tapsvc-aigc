@@ -8,7 +8,7 @@ AIGC 内容生成技能。通过 `tapsvc-aigc` CLI 生成图片、语音和视�
 
 - **图片生成与编辑** — gpt-image-2（默认）、gpt-image-1.5、gemini-3-pro-image、gemini-3.1-flash-image（兼容 `-preview` 别名）
 - **语音合成** — elevenlabs/eleven_v3、elevenlabs/eleven_multilingual_v2
-- **视频生成与编辑** — doubao-seedance-2-0-fast-260128、doubao-seedance-2-0-260128、happyhorse-1.1-t2v、happyhorse-1.1-i2v、happyhorse-1.1-r2v、happyhorse-1.0-video-edit
+- **视频生成与编辑** — bytedance/seedance-2.5、doubao-seedance-2-0-fast-260128、doubao-seedance-2-0-260128、happyhorse-1.1-t2v、happyhorse-1.1-i2v、happyhorse-1.1-r2v、happyhorse-1.0-video-edit
 
 网关提供多种协议：图片和语音使用 OpenAI 兼容端点，Seedance 使用
 Volcengine 透传，HappyHorse 使用 DashScope 透传。`/v1/models` 返回的是跨协议
@@ -24,7 +24,8 @@ curl -s -H "Authorization: Bearer $TAPSVC_API_KEY" \
 
 视频能力重点：
 
-- Seedance 完整版支持 480p、720p、1080p、4k；fast 版支持 480p/720p。
+- Seedance 2.5 支持最长 30 秒单次连贯输出、纯参考音频驱动、最多 30 张参考图，并可输出 `mov`；分辨率上限为 480p/720p。
+- Seedance 2.0 完整版支持 480p、720p、1080p、4k；fast 版支持 480p/720p。
 - HappyHorse 支持文生视频、首帧图生视频、多参考图生视频和已有视频编辑，分辨率为 720p/1080p。
 - 使用 `tapsvc-aigc video get <task-id> --provider happyhorse` 查询 HappyHorse 任务。
 

@@ -8,7 +8,7 @@ AIGC content generation skill. Generates images, audio speech, and videos via th
 
 - **Image generation & editing** — gpt-image-2 (default), gpt-image-1.5, gemini-3-pro-image, gemini-3.1-flash-image (`-preview` aliases remain compatible)
 - **Audio speech synthesis** — elevenlabs/eleven_v3, elevenlabs/eleven_multilingual_v2
-- **Video generation & editing** — doubao-seedance-2-0-fast-260128, doubao-seedance-2-0-260128, happyhorse-1.1-t2v, happyhorse-1.1-i2v, happyhorse-1.1-r2v, happyhorse-1.0-video-edit
+- **Video generation & editing** — bytedance/seedance-2.5, doubao-seedance-2-0-fast-260128, doubao-seedance-2-0-260128, happyhorse-1.1-t2v, happyhorse-1.1-i2v, happyhorse-1.1-r2v, happyhorse-1.0-video-edit
 
 The gateway exposes several protocols. Images and speech use OpenAI-compatible
 endpoints; Seedance uses the Volcengine passthrough; HappyHorse uses the
@@ -25,7 +25,8 @@ curl -s -H "Authorization: Bearer $TAPSVC_API_KEY" \
 
 Video highlights:
 
-- Seedance full supports 480p, 720p, 1080p, and 4k; the fast model supports 480p/720p.
+- Seedance 2.5 generates up to 30 coherent seconds in one pass, accepts reference audio alone, takes up to 30 reference images, and can output `mov`; it is capped at 480p/720p.
+- Seedance 2.0 full supports 480p, 720p, 1080p, and 4k; the fast model supports 480p/720p.
 - HappyHorse supports focused text-to-video, first-frame animation, reference-image video, and existing-video editing workflows at 720p/1080p.
 - HappyHorse tasks can be checked with `tapsvc-aigc video get <task-id> --provider happyhorse`.
 
