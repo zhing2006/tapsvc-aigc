@@ -25,7 +25,7 @@ curl -s -H "Authorization: Bearer $TAPSVC_API_KEY" \
 
 Video highlights:
 
-- Seedance 2.5 generates up to 30 coherent seconds in one pass, accepts reference audio alone, takes up to 30 reference images, and can output `mov`; it is capped at 480p/720p.
+- Seedance 2.5 generates up to 30 coherent seconds in one pass, accepts reference audio alone, takes up to 30 reference images, and can output `mov`; it supports 480p, 720p and 1080p.
 - Seedance 2.0 full supports 480p, 720p, 1080p, and 4k; the fast model supports 480p/720p.
 - HappyHorse supports focused text-to-video, first-frame animation, reference-image video, and existing-video editing workflows at 720p/1080p.
 - HappyHorse tasks can be checked with `tapsvc-aigc video get <task-id> --provider happyhorse`.

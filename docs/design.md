@@ -72,7 +72,7 @@ tapsvc-aigc 是一个 Rust CLI 工具，通过 TapSvc AI Gateway 的兼容协议
 | 能力 | `bytedance/seedance-2.5` | `doubao-seedance-2-0-*` |
 |------|--------------------------|--------------------------|
 | 时长 | 4-30 秒 | 4-15 秒 |
-| 分辨率 | 480p、720p | 480p、720p（完整版另有 1080p、4k） |
+| 分辨率 | 480p、720p、1080p | 480p、720p（完整版另有 1080p、4k） |
 | 参考图 / 视频 / 音频上限 | 30 / 10 / 10 | 9 / 3 / 3 |
 | 仅音频输入 | ✅ | ❌（需搭配参考图或参考视频） |
 | `--output-format mov` | ✅ | ❌ |
@@ -283,7 +283,7 @@ tapsvc-aigc video generate \
 | `--ref-image` | 否 | — | 参考图片（可重复，2.5 最多 30 张 / 其他最多 9 张，与 `--first-frame` 互斥） |
 | `--ref-video` | 否 | — | 参考视频 URL（可重复，2.5 最多 10 个 / 其他最多 3 个，仅支持 URL，与 `--first-frame` 互斥） |
 | `--ref-audio` | 否 | — | 参考音频（可重复，2.5 最多 10 个 / 其他最多 3 个；2.5 可单独使用，其他需搭配 `--ref-image` 或 `--ref-video`） |
-| `--resolution` | 否 | `720p` | 分辨率（按模型支持 `480p`、`720p`、`1080p`、`4k`；2.5 与 fast 版仅 480p/720p） |
+| `--resolution` | 否 | `720p` | 分辨率（按模型支持 `480p`、`720p`、`1080p`、`4k`；2.5 最高 1080p，fast 版最高 720p，4k 仅 2.0 完整版） |
 | `--aspect-ratio` | 否 | `adaptive` | 宽高比（`16:9`、`4:3`、`1:1`、`3:4`、`9:16`、`21:9`、`adaptive`）；2.5 首帧任务只能是 `adaptive` |
 | `--duration` | 否 | `5` | Seedance 2.5 为 4-30 秒、2.0 为 4-15 秒，或 -1 自动；HappyHorse 生成模型为 3-15 秒；video-edit 不支持 |
 | `--no-audio` | 否 | `false` | 禁用音频生成（默认生成音频） |
@@ -299,8 +299,8 @@ tapsvc-aigc video generate \
 | `--timeout` | 否 | `300` | 超时时间（秒）；2.5 长时长需显式加大（如 30 秒用 `--timeout 900`） |
 | `--output, -o` | 否 | `video_{timestamp}.{mp4\|mov}` | 输出文件路径 |
 
-Seedance 完整版还支持 1080p/4k，fast 版仅支持 480p/720p。HappyHorse 支持
-720p/1080p，其中 t2v/i2v/r2v 时长为 3-15 秒；video-edit 不接受时长参数。
+Seedance 2.0 完整版还支持 1080p/4k，2.5 支持到 1080p，fast 版仅支持 480p/720p。
+HappyHorse 支持 720p/1080p，其中 t2v/i2v/r2v 时长为 3-15 秒；video-edit 不接受时长参数。
 HappyHorse 任务通过 `video get <task-id> --provider happyhorse` 查询。
 
 Seedance 2.5 与 2.0 均不支持 `camera_fixed` API 参数。需要固定镜头时，应在提示词中

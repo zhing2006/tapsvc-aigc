@@ -197,7 +197,7 @@ pub enum VideoCommand {
         #[arg(long, action = clap::ArgAction::Append)]
         ref_audio: Vec<String>,
 
-        /// Resolution (480p, 720p, 1080p, 4k; Seedance 2.5 and the fast model support 480p/720p only)
+        /// Resolution (480p, 720p, 1080p, 4k; Seedance 2.5 supports up to 1080p, the fast model up to 720p)
         #[arg(long, default_value = "720p", value_parser = ["480p", "720p", "1080p", "4k"])]
         resolution: String,
 

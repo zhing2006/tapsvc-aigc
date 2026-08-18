@@ -488,9 +488,14 @@ fn validate_resolution(
         if !matches!(resolution, "720p" | "1080p") {
             bail!("HappyHorse only supports 720p and 1080p");
         }
-    } else if (model == "doubao-seedance-2-0-fast-260128" || is_seedance_2_5(model))
-        && !matches!(resolution, "480p" | "720p")
-    {
+    } else if is_seedance_2_5(model) {
+        // 2.5 gained 1080p on 2026-08-17; 4k remains exclusive to the 2.0 full model.
+        if !matches!(resolution, "480p" | "720p" | "1080p") {
+            bail!(
+                "Seedance 2.5 supports 480p, 720p and 1080p; use doubao-seedance-2-0-260128 for {resolution}"
+            );
+        }
+    } else if model == "doubao-seedance-2-0-fast-260128" && !matches!(resolution, "480p" | "720p") {
         bail!(
             "model {model} only supports 480p and 720p; use doubao-seedance-2-0-260128 for {resolution}"
         );
@@ -1025,7 +1030,9 @@ mod tests {
         assert!(validate_duration("bytedance/seedance-2.5", None, 31).is_err());
         assert!(validate_duration("doubao-seedance-2-0-260128", None, 30).is_err());
         assert!(validate_resolution("bytedance/seedance-2.5", None, "720p").is_ok());
-        assert!(validate_resolution("bytedance/seedance-2.5", None, "1080p").is_err());
+        assert!(validate_resolution("bytedance/seedance-2.5", None, "1080p").is_ok());
+        assert!(validate_resolution("bytedance/seedance-2.5", None, "4k").is_err());
+        assert!(validate_resolution("doubao-seedance-2-5-260628", None, "1080p").is_ok());
     }
 
     #[test]

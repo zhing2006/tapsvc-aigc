@@ -24,7 +24,7 @@ curl -s -H "Authorization: Bearer $TAPSVC_API_KEY" \
 
 视频能力重点：
 
-- Seedance 2.5 支持最长 30 秒单次连贯输出、纯参考音频驱动、最多 30 张参考图，并可输出 `mov`；分辨率上限为 480p/720p。
+- Seedance 2.5 支持最长 30 秒单次连贯输出、纯参考音频驱动、最多 30 张参考图，并可输出 `mov`；支持 480p、720p、1080p。
 - Seedance 2.0 完整版支持 480p、720p、1080p、4k；fast 版支持 480p/720p。
 - HappyHorse 支持文生视频、首帧图生视频、多参考图生视频和已有视频编辑，分辨率为 720p/1080p。
 - 使用 `tapsvc-aigc video get <task-id> --provider happyhorse` 查询 HappyHorse 任务。

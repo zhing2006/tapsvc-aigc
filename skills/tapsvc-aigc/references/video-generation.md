@@ -7,7 +7,7 @@ endpoint. The CLI selects the provider from the model ID.
 
 | Model | Provider | Best for | Resolution | Duration |
 |---|---|---|---|---|
-| `bytedance/seedance-2.5` | Volcengine | Long single takes, audio-driven video, editing pipelines | 480p, 720p | 4-30 or `-1` auto |
+| `bytedance/seedance-2.5` | Volcengine | Long single takes, audio-driven video, editing pipelines | 480p, 720p, 1080p | 4-30 or `-1` auto |
 | `doubao-seedance-2-0-fast-260128` (DEFAULT) | Volcengine | Drafts and rapid iteration | 480p, 720p | 4-15 or `-1` auto |
 | `doubao-seedance-2-0-260128` | Volcengine | Final, high-quality work | 480p, 720p, 1080p, 4k | 4-15 or `-1` auto |
 | `happyhorse-1.1-t2v` | DashScope | Text-to-video | 720p, 1080p | 3-15 |
@@ -17,9 +17,9 @@ endpoint. The CLI selects the provider from the model ID.
 
 Choose Seedance for multimodal reference video/audio workflows and complex
 camera choreography. Choose the exact HappyHorse variant when the task maps to
-one of its focused modes. Use the full Seedance 2.0 model for 1080p/4k final
-output. Reach for `bytedance/seedance-2.5` when the task needs more than 15
-seconds in one take, audio as the driving input, more than 9 reference images, or
+one of its focused modes. Use the full Seedance 2.0 model for 4k final output.
+Reach for `bytedance/seedance-2.5` when the task needs more than 15 seconds in
+one take, audio as the driving input, more than 9 reference images, or
 `mov` output for a grading/compositing pipeline.
 
 **Model ID**: `bytedance/seedance-2.5` is the exact ID the gateway accepts. The
@@ -34,7 +34,7 @@ ARK-native `doubao-seedance-2-5-260628` is NOT configured and will fail.
 | Audio-only input | `--ref-audio <path>` with no `--ref-image`/`--ref-video` |
 | 30 ref images / 10 ref videos / 10 ref audios | repeat the flags |
 
-Not available on 2.5: `--camera-fixed` (rejected, same as 2.0), and 1080p/4k.
+Not available on 2.5: `--camera-fixed` (rejected, same as 2.0), and 4k.
 On 2.5 first-frame tasks `--aspect-ratio` must stay `adaptive` — the output ratio
 follows the first frame.
 
@@ -58,7 +58,7 @@ Stop and inform the user on violation — do NOT rely on CLI error messages.
 | `--expires-after` | Seedance only, 3600-259200 | Default 48 h |
 | `--return-last-frame` | Seedance only | Saves `<output-stem>_last_frame.png` |
 | `--aspect-ratio` | 2.5 + `--first-frame` → must be `adaptive` | Output follows the first frame |
-| `--resolution` | 2.5 and the fast model: 480p/720p only | 1080p/4k need `doubao-seedance-2-0-260128` |
+| `--resolution` | 2.5: up to 1080p; the fast model: 480p/720p only | 4k needs `doubao-seedance-2-0-260128` |
 | Input | At least one required | `--prompt`/`--prompt-file`, `--first-frame`, `--ref-image`, `--ref-video`, or (2.5 only) `--ref-audio` |
 
 ### Timeout
@@ -386,7 +386,7 @@ seed can improve repeatability but does not guarantee identical output.
 
 | Parameter | Default | Notes |
 |-----------|---------|-------|
-| `--resolution` | `720p` | Seedance full: up to 4k; fast: 480p/720p; HappyHorse: 720p/1080p |
+| `--resolution` | `720p` | Seedance 2.0 full: up to 4k; 2.5: up to 1080p; fast: 480p/720p; HappyHorse: 720p/1080p |
 | `--aspect-ratio` | `adaptive` | `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `21:9`, `adaptive` |
 | `--duration` | `5` | Seedance: 4-15 or `-1`; HappyHorse generation: 3-15; video edit follows input |
 | `--no-audio` | false | Disable audio generation |
