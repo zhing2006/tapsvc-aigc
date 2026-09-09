@@ -2,6 +2,34 @@
 
 ## Models
 
+### GPT Image 2.5
+
+Use these exact TapSvc proxy IDs, including the `openai/` prefix:
+
+| Model ID | Best suited for |
+|----------|-----------------|
+| `openai/gpt-image-2.5-sunburst` | Precise image editing and generation |
+| `openai/gpt-image-2.5-flare` | Fast, high-quality generation and editing |
+
+Both use the existing Image API endpoints. The [OpenAI image guide](https://developers.openai.com/api/docs/guides/image-generation)
+documents these capabilities (TapSvc routing may impose additional limits):
+
+- Quality: `auto`, `low`, `medium`, `high`, `xhigh`, `max`, for generation and editing.
+- Size: `auto` or custom `WIDTHxHEIGHT`; both edges must be multiples of 16,
+  neither may exceed 3840, aspect ratio must be between 1:3 and 3:1, and total
+  pixels must be 655,360–8,294,400. Sizes above `2560x1440` are experimental.
+- Background: `auto`, `opaque`, `transparent`; transparency requires PNG or WebP.
+- Mask editing: supported. This CLI accepts one input image (PNG/JPEG/WebP,
+  up to 25MB) and an optional PNG mask (up to 4MB). The mask must match the
+  input image dimensions and have an alpha channel.
+- Start with `n=1` for proxy compatibility; higher counts have not been verified
+  on these TapSvc routes.
+
+The older `gpt-image-2` proxy restrictions below do not establish limits for
+the new 2.5 routes. Preserve a user-selected 2.5 model for mask editing.
+
+### Earlier models and existing proxy restrictions
+
 | Feature | gpt-image-2 (DEFAULT) | gpt-image-1.5 | gemini-3-pro-image | gemini-3.1-flash-image |
 |---------|----------------------|---------------|--------------------|------------------------|
 | Count | n=1 only | n=1 only | n=1 only | n=1 only |
@@ -29,11 +57,11 @@ multi-reference inputs. They are not exposed by this CLI's OpenAI-shaped image
 commands. Use the Gemini-native `/v1beta/models/{model}:generateContent` route
 when a task explicitly requires them.
 
-> **Important**: All models support `n=1` only (litellm proxy limitation).
+> **Existing routes**: Use `n=1` with the earlier models listed above (proxy limitation).
 > For multiple images, execute the command multiple times with different prompts or params.
 
-> **Important**: Mask editing is `gpt-image-1.5` only. When mask editing is
-> requested, MUST switch to `gpt-image-1.5` regardless of user's model choice.
+> **Mask editing**: Use a GPT Image 2.5 model or `gpt-image-1.5`.
+> Gemini and the legacy `gpt-image-2` proxy route do not support masks.
 
 > **gpt-image-2 size**: only `--size auto` (the new default) is accepted. The
 > router chooses output dimensions; bias the aspect ratio in the prompt instead
@@ -51,22 +79,42 @@ when a task explicitly requires them.
 ```bash
 # Image generation
 tapsvc-aigc image generate -m <model> -p <prompt> [--prompt-file <path>] \
-  [--size <auto|WxH>] [--quality <auto|high|medium|low>] \
+  [--size <auto|WxH>] [--quality <auto|low|medium|high|xhigh|max>] \
   [--background <transparent|opaque|auto>] [--response-format <png|jpeg|webp>] \
   [-o <output>]
 
 # Image editing
 tapsvc-aigc image edit -m <model> --image <path> -p <prompt> [--prompt-file <path>] \
-  [--mask <path>] [--size <auto|WxH>] [--response-format <png|jpeg|webp>] \
+  [--mask <path>] [--size <auto|WxH>] [--quality <auto|low|medium|high|xhigh|max>] \
+  [--background <transparent|opaque|auto>] [--response-format <png|jpeg|webp>] \
   [-o <output>]
 ```
 
 `--size` defaults to `auto`; when `auto`, the field is omitted from the request
 (required for gpt-image-2, accepted by all other models).
 
+`xhigh` and `max` require GPT Image 2.5. Editing omits `quality` and `background`
+unless explicitly supplied, letting the API use its defaults. The CLI maps
+`--response-format` to the API's `output_format`; GPT Image generation omits the
+unsupported API `response_format` field and handles both base64 and proxy URL responses.
+
 ### Quick examples
 
 ```bash
+# GPT Image 2.5 Flare — fast generation with an explicit size
+tapsvc-aigc image generate -m openai/gpt-image-2.5-flare \
+  -p "A ginger tabby cat in a sunlit window" \
+  --quality xhigh --size 1536x1024 -o flare.png
+
+# GPT Image 2.5 Sunburst — precise editing
+tapsvc-aigc image edit -m openai/gpt-image-2.5-sunburst \
+  --image photo.png -p "Change only the mug to blue, preserve everything else" \
+  --quality max -o sunburst-edit.png
+
+# GPT Image 2.5 — transparent PNG output
+tapsvc-aigc image generate -m openai/gpt-image-2.5-sunburst \
+  -p "Cute cartoon robot mascot sticker" --background transparent -o sticker.png
+
 # gpt-image-2 (default) — bias aspect ratio via prompt, no --size
 tapsvc-aigc image generate -m gpt-image-2 \
   -p "A ginger tabby cat in a sunlit window, square composition" \
@@ -77,7 +125,7 @@ tapsvc-aigc image generate -m gpt-image-1.5 \
   -p "wide cinematic landscape of misty mountains at sunrise" \
   --size 1536x1024 -o mountains.png
 
-# Transparent sticker — must use gpt-image-1.5
+# Transparent sticker — also available with gpt-image-1.5
 tapsvc-aigc image generate -m gpt-image-1.5 \
   -p "cute cartoon robot mascot, flat design, sticker" \
   --background transparent -o robot.png
@@ -172,14 +220,14 @@ Re-state invariants on every iteration to prevent drift:
 - `Preserve the original lighting direction and color temperature`
 - `Keep the camera angle and perspective unchanged`
 
-### Mask Editing (gpt-image-1.5 only)
+### Mask Editing (GPT Image 2.5 or gpt-image-1.5)
 
 - Mask must be PNG, < 4MB
 - Transparent areas mark regions to edit
 - Pass via `--mask <path>`
 
 ```bash
-tapsvc-aigc image edit -m gpt-image-1.5 \
+tapsvc-aigc image edit -m openai/gpt-image-2.5-sunburst \
   --image photo.png --mask mask.png \
   -p "Replace the masked area with a blooming cherry tree"
 ```

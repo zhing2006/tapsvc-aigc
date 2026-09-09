@@ -28,6 +28,8 @@ pub struct EditImageRequest {
     pub mask_filename: Option<String>,
     pub n: Option<u32>,
     pub size: Option<String>,
+    pub quality: Option<String>,
+    pub background: Option<String>,
     pub output_format: Option<String>,
 }
 

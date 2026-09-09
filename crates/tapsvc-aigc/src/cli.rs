@@ -33,7 +33,7 @@ pub enum Command {
 pub enum ImageCommand {
     /// Edit an existing image
     Edit {
-        /// Model name
+        /// Model ID (e.g. openai/gpt-image-2.5-sunburst or openai/gpt-image-2.5-flare)
         #[arg(short, long)]
         model: String,
 
@@ -53,13 +53,21 @@ pub enum ImageCommand {
         #[arg(long)]
         mask: Option<String>,
 
-        /// Output image size (`auto` lets the model/router decide; required for gpt-image-2)
+        /// Output image size (auto or WxH; the legacy gpt-image-2 proxy requires auto)
         #[arg(long, default_value = "auto")]
         size: String,
 
         /// Number of images to generate (1-10)
         #[arg(short, long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=10))]
         n: u32,
+
+        /// Quality level (auto, low, medium, high; GPT Image 2.5 also supports xhigh, max)
+        #[arg(long)]
+        quality: Option<String>,
+
+        /// Background type (transparent, opaque, auto; transparent requires png or webp)
+        #[arg(long)]
+        background: Option<String>,
 
         /// Output image format (png, jpeg, webp)
         #[arg(long, default_value = "png")]
@@ -71,7 +79,7 @@ pub enum ImageCommand {
     },
     /// Generate images from text prompt
     Generate {
-        /// Model name
+        /// Model ID (e.g. openai/gpt-image-2.5-sunburst or openai/gpt-image-2.5-flare)
         #[arg(short, long)]
         model: String,
 
@@ -83,7 +91,7 @@ pub enum ImageCommand {
         #[arg(long)]
         prompt_file: Option<String>,
 
-        /// Image size (`auto` lets the model/router decide; required for gpt-image-2)
+        /// Image size (auto or WxH; the legacy gpt-image-2 proxy requires auto)
         #[arg(long, default_value = "auto")]
         size: String,
 
@@ -91,7 +99,7 @@ pub enum ImageCommand {
         #[arg(short, long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=10))]
         n: u32,
 
-        /// Quality level (auto, high, medium, low)
+        /// Quality level (auto, low, medium, high; GPT Image 2.5 also supports xhigh, max)
         #[arg(long, default_value = "auto")]
         quality: String,
 

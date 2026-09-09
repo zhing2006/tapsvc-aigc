@@ -6,7 +6,7 @@ AIGC content generation skill. Generates images, audio speech, and videos via th
 
 ## Supported Capabilities
 
-- **Image generation & editing** — gpt-image-2 (default), gpt-image-1.5, gemini-3-pro-image, gemini-3.1-flash-image (`-preview` aliases remain compatible)
+- **Image generation & editing** — openai/gpt-image-2.5-sunburst, openai/gpt-image-2.5-flare, gpt-image-2 (default), gpt-image-1.5, gemini-3-pro-image, gemini-3.1-flash-image (`-preview` aliases remain compatible)
 - **Audio speech synthesis** — elevenlabs/eleven_v3, elevenlabs/eleven_multilingual_v2
 - **Video generation & editing** — bytedance/seedance-2.5, doubao-seedance-2-0-fast-260128, doubao-seedance-2-0-260128, happyhorse-1.1-t2v, happyhorse-1.1-i2v, happyhorse-1.1-r2v, happyhorse-1.0-video-edit
 
@@ -21,6 +21,21 @@ Discover the live model catalog:
 curl -s -H "Authorization: Bearer $TAPSVC_API_KEY" \
   "${TAPSVC_BASE_URL:-https://llm-proxy.tapsvc.com}/v1/models" \
   | jq -r '.data[].id'
+```
+
+GPT Image 2.5 uses the full proxy IDs shown below. Sunburst focuses on precise
+editing; Flare on fast generation. Both support `--quality xhigh` / `max`,
+custom sizes, and transparent PNG/WebP output. See the
+[image reference](skills/tapsvc-aigc/references/image-generation.md) for parameters
+and gateway limits, based on the [OpenAI image guide](https://developers.openai.com/api/docs/guides/image-generation).
+
+```bash
+tapsvc-aigc image generate -m openai/gpt-image-2.5-flare \
+  -p "A ginger tabby cat in a sunlit window" --quality xhigh -o cat.png
+
+tapsvc-aigc image edit -m openai/gpt-image-2.5-sunburst \
+  --image photo.png -p "Change only the mug to blue, preserve everything else" \
+  --quality max -o edited.png
 ```
 
 Video highlights:

@@ -31,12 +31,12 @@ pub async fn handle(command: ImageCommand) -> anyhow::Result<()> {
             let client = OpenAiClient::new(base_url, api_key);
 
             let req = CreateImageRequest {
+                response_format: generation_response_format(&model),
                 model,
                 prompt: final_prompt,
                 n: Some(n),
                 size: size_to_param(&size),
                 quality: Some(quality),
-                response_format: Some("b64_json".to_string()),
                 background: Some(background),
                 output_format: Some(response_format.clone()),
             };
@@ -107,6 +107,8 @@ pub async fn handle(command: ImageCommand) -> anyhow::Result<()> {
             mask,
             size,
             n,
+            quality,
+            background,
             response_format,
             output,
         } => {
@@ -155,6 +157,8 @@ pub async fn handle(command: ImageCommand) -> anyhow::Result<()> {
                 mask_filename,
                 n: Some(n),
                 size: size_to_param(&size),
+                quality,
+                background,
                 output_format: Some(response_format.clone()),
             };
 
@@ -216,6 +220,16 @@ pub async fn handle(command: ImageCommand) -> anyhow::Result<()> {
 
             Ok(())
         }
+    }
+}
+
+fn generation_response_format(model: &str) -> Option<String> {
+    // GPT Image returns base64 by default and does not accept response_format.
+    let model = model.strip_prefix("openai/").unwrap_or(model);
+    if model.starts_with("gpt-image-") {
+        None
+    } else {
+        Some("b64_json".to_string())
     }
 }
 

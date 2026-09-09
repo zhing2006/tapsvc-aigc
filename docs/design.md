@@ -16,6 +16,8 @@ tapsvc-aigc 是一个 Rust CLI 工具，通过 TapSvc AI Gateway 的兼容协议
 
 | 模型 | 提供商 | 说明 |
 |------|--------|------|
+| `openai/gpt-image-2.5-sunburst` | OpenAI | GPT Image 2.5，侧重精确编辑；支持生成、编辑及 `xhigh` / `max` 质量 |
+| `openai/gpt-image-2.5-flare` | OpenAI | GPT Image 2.5，侧重快速生成；支持生成、编辑及 `xhigh` / `max` 质量 |
 | `gpt-image-2` | OpenAI | 新一代图片生成模型（默认）— 文本渲染、多语种、色彩中性度更好；仅接受 `size=auto`，不支持 `background=transparent` |
 | `gpt-image-1.5` | OpenAI | 上一代旗舰；需要参数级 `background=transparent` 或固定尺寸时使用 |
 | `gemini-3-pro-image` | Google | Gemini 3 Pro 图片生成（复杂专业资产） |
@@ -23,7 +25,14 @@ tapsvc-aigc 是一个 Rust CLI 工具，通过 TapSvc AI Gateway 的兼容协议
 
 `gemini-3-pro-image-preview` 和 `gemini-3.1-flash-image-preview` 仍作为兼容别名。Gemini 原生 API 的搜索、thinking、多轮编辑和丰富多参考图能力不由当前 OpenAI 风格图片 CLI 暴露。
 
-> **gpt-image-2 限制：**
+GPT Image 2.5 必须使用上述带 `openai/` 的完整代理 ID，CLI 原样传递模型名。
+根据 [OpenAI 图片指南](https://developers.openai.com/api/docs/guides/image-generation)，
+两者支持 `auto` 或自定义 `WIDTHxHEIGHT`（边长为 16 的倍数、最大边长 3840、
+宽高比 1:3 至 3:1、总像素 655,360–8,294,400；超过 `2560x1440` 为实验性尺寸），
+支持 PNG/WebP 透明背景及 mask 编辑。CLI 保留输入图片 25MB、PNG mask 4MB 的限制。
+代理实际能力需以调用结果为准；新路由先使用 `n=1`，更高数量尚未验证。
+
+> **旧版 gpt-image-2 代理限制（不适用于推断 2.5 路由能力）：**
 > - **`size` 仅接受 `auto`** — 路由层自动选择尺寸，显式 `WxH` 会被代理拒绝；通过 prompt 措辞（"square composition" / "portrait" / "wide landscape 16:9"）引导比例
 > - **`background` 不支持 `transparent`** — 透明背景请写进 prompt（"transparent background, isolated subject on alpha channel"），或回退到 `gpt-image-1.5`
 > - **响应可能为 URL** — 某些代理路由会把 gpt-image-2 输出放到对象存储并仅回 `url`，CLI 会自动下载
@@ -129,7 +138,7 @@ tapsvc-aigc image generate --model gemini-3.1-flash-image --prompt-file prompt.t
 | `--prompt-file` | 否 | — | 从文件读取提示词，可与 `--prompt` 同时使用（file 内容在前拼接） |
 | `--size` | 否 | `auto` | 图片尺寸 (`auto`, `1024x1024`, `1536x1024`, `1024x1536`)。`auto` 时不发送字段，由代理/模型决定；**gpt-image-2 仅接受 `auto`** |
 | `--n` | 否 | `1` | 生成数量 (1-10) |
-| `--quality` | 否 | `auto` | 质量级别 (`auto`, `high`, `medium`, `low`) |
+| `--quality` | 否 | `auto` | 质量级别 (`auto`, `low`, `medium`, `high`)，GPT Image 2.5 另支持 `xhigh`, `max` |
 | `--response-format` | 否 | `png` | 输出图片格式 (`png`, `jpeg`, `webp`) |
 | `--background` | 否 | `auto` | 背景类型 (`transparent`, `opaque`, `auto`) |
 | `--output, -o` | 否 | 当前目录自动命名 | 输出文件路径 |
@@ -160,9 +169,11 @@ tapsvc-aigc image edit --model gpt-image-1.5 --image input.png --prompt-file edi
 | `--image` | 是 | — | 输入图片路径（PNG/JPEG/WebP，< 25MB） |
 | `--prompt, -p` | 是* | — | 编辑提示词 |
 | `--prompt-file` | 否 | — | 从文件读取提示词，可与 `--prompt` 同时使用（file 内容在前拼接） |
-| `--mask` | 否 | — | 编辑区域蒙版（PNG，< 4MB，透明区域为编辑区域；仅 gpt-image-1.5 支持，Gemini 不支持。CLI 仅校验格式和大小，不在本地校验是否与输入图片同尺寸） |
+| `--mask` | 否 | — | 编辑区域蒙版（PNG，< 4MB，透明区域为编辑区域；GPT Image 2.5 和 gpt-image-1.5 支持，Gemini 不支持。CLI 仅校验格式和大小，不在本地校验是否与输入图片同尺寸） |
 | `--size` | 否 | `auto` | 输出图片尺寸（`auto` 时不发送字段；**gpt-image-2 仅接受 `auto`**） |
 | `--n` | 否 | `1` | 生成数量 (1-10) |
+| `--quality` | 否 | 不发送 | 质量级别 (`auto`, `low`, `medium`, `high`)，GPT Image 2.5 另支持 `xhigh`, `max`；省略时使用 API 默认值 |
+| `--background` | 否 | 不发送 | 背景类型 (`auto`, `opaque`, `transparent`)；透明背景需使用 PNG/WebP；省略时使用 API 默认值 |
 | `--response-format` | 否 | `png` | 输出图片格式 (`png`, `jpeg`, `webp`) |
 | `--output, -o` | 否 | 当前目录自动命名 | 输出文件路径 |
 
@@ -347,18 +358,17 @@ POST {base_url}/v1/images/generations
 Authorization: Bearer {api_key}
 
 {
-  "model": "gpt-image-1.5",
+  "model": "openai/gpt-image-2.5-flare",
   "prompt": "a cat in space",
   "n": 1,
   "size": "1024x1024",
-  "quality": "auto",
-  "response_format": "b64_json",
+  "quality": "xhigh",
   "output_format": "png",
   "background": "auto"
 }
 ```
 
-> `response_format` 固定为 `"b64_json"`，确保返回 base64 编码的图片数据。`output_format` 控制实际图片编码格式（`png`/`jpeg`/`webp`），由 CLI 的 `--response-format` 参数值映射而来，作为 provider kwargs 透传给 OpenAI。
+> GPT Image 系列不发送 API 不支持的 `response_format` 字段，默认返回 base64；其他模型保留 `response_format="b64_json"`。`output_format` 控制实际图片编码格式（`png`/`jpeg`/`webp`），由 CLI 的 `--response-format` 参数映射而来。CLI 同时兼容代理仅返回 URL 的情况并自动下载。
 
 **响应：**
 ```json
@@ -388,16 +398,18 @@ POST {base_url}/v1/images/edits
 Authorization: Bearer {api_key}
 Content-Type: multipart/form-data
 
-model=gpt-image-1.5
+model=openai/gpt-image-2.5-sunburst
 image=@input.png
 mask=@mask.png          (可选)
 prompt=add a hat to the person
 n=1
 size=1024x1024
+quality=max            (可选)
+background=transparent (可选)
 output_format=png
 ```
 
-> **不发 `response_format` 字段** — gpt-image-1.5 的 edit 端点不接受 `response_format` 参数（仅 dall-e-2 支持），gpt-image-1.5 默认返回 base64 编码。`image` 支持 PNG/JPEG/WebP 格式，< 25MB。`mask` 仅支持 PNG 格式，< 4MB，透明区域表示需要编辑的区域。`mask` 仅 gpt-image-1.5 支持，Gemini 模型传入 `--mask` 会被 LiteLLM 拒绝。`output_format` 控制输出图片编码格式，由 CLI 的 `--response-format` 参数值映射而来。
+> **不发 `response_format` 字段** — GPT Image 默认返回 base64 编码，CLI 也兼容代理 URL 响应。`image` 支持 PNG/JPEG/WebP 格式，< 25MB。`mask` 仅支持 PNG 格式，< 4MB，透明区域表示需要编辑的区域；GPT Image 2.5 和 gpt-image-1.5 支持 mask，Gemini 不支持。`quality` 和 `background` 仅在显式传入时发送；`output_format` 由 CLI 的 `--response-format` 参数映射而来。
 
 **响应：**
 ```json

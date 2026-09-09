@@ -6,7 +6,7 @@ AIGC 内容生成技能。通过 `tapsvc-aigc` CLI 生成图片、语音和视�
 
 ## 支持的能力
 
-- **图片生成与编辑** — gpt-image-2（默认）、gpt-image-1.5、gemini-3-pro-image、gemini-3.1-flash-image（兼容 `-preview` 别名）
+- **图片生成与编辑** — openai/gpt-image-2.5-sunburst、openai/gpt-image-2.5-flare、gpt-image-2（默认）、gpt-image-1.5、gemini-3-pro-image、gemini-3.1-flash-image（兼容 `-preview` 别名）
 - **语音合成** — elevenlabs/eleven_v3、elevenlabs/eleven_multilingual_v2
 - **视频生成与编辑** — bytedance/seedance-2.5、doubao-seedance-2-0-fast-260128、doubao-seedance-2-0-260128、happyhorse-1.1-t2v、happyhorse-1.1-i2v、happyhorse-1.1-r2v、happyhorse-1.0-video-edit
 
@@ -20,6 +20,20 @@ Volcengine 透传，HappyHorse 使用 DashScope 透传。`/v1/models` 返回的�
 curl -s -H "Authorization: Bearer $TAPSVC_API_KEY" \
   "${TAPSVC_BASE_URL:-https://llm-proxy.tapsvc.com}/v1/models" \
   | jq -r '.data[].id'
+```
+
+GPT Image 2.5 使用下面的完整代理 ID。Sunburst 侧重精确编辑，Flare 侧重快速生成；
+两者均支持 `--quality xhigh` / `max`、自定义尺寸及 PNG/WebP 透明背景。
+参数和代理限制见[图片参考文档](skills/tapsvc-aigc/references/image-generation.md)，
+模型能力依据 [OpenAI 官方图片指南](https://developers.openai.com/api/docs/guides/image-generation)。
+
+```bash
+tapsvc-aigc image generate -m openai/gpt-image-2.5-flare \
+  -p "一只橘猫坐在阳光照耀的窗边" --quality xhigh -o cat.png
+
+tapsvc-aigc image edit -m openai/gpt-image-2.5-sunburst \
+  --image photo.png -p "只把杯子改为蓝色，其余内容保持不变" \
+  --quality max -o edited.png
 ```
 
 视频能力重点：

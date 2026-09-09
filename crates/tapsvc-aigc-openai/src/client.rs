@@ -36,6 +36,8 @@ impl OpenAiClient {
         let mask_filename = req.mask_filename.clone();
         let n = req.n;
         let size = req.size.clone();
+        let quality = req.quality.clone();
+        let background = req.background.clone();
         let output_format = req.output_format.clone();
 
         retry(&self.retry_config, || {
@@ -47,6 +49,8 @@ impl OpenAiClient {
             let mask_bytes = mask_bytes.clone();
             let mask_filename = mask_filename.clone();
             let size = size.clone();
+            let quality = quality.clone();
+            let background = background.clone();
             let output_format = output_format.clone();
 
             async move {
@@ -75,6 +79,12 @@ impl OpenAiClient {
                 }
                 if let Some(size) = size {
                     form = form.text("size", size);
+                }
+                if let Some(quality) = quality {
+                    form = form.text("quality", quality);
+                }
+                if let Some(background) = background {
+                    form = form.text("background", background);
                 }
                 if let Some(fmt) = output_format {
                     form = form.text("output_format", fmt);
